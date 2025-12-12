@@ -1,0 +1,55 @@
+# ================================================
+# Example Workflow - Public Project (Maven Central)
+# ================================================
+# Simple workflow for open-source projects
+# Uses Maven Central for dependencies
+# ================================================
+
+name: SBT Build (Public)
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      # ========================================
+      # Checkout code
+      # ========================================
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      # ========================================
+      # Setup SBT (uses Maven Central by default)
+      # ========================================
+      - name: Setup SBT
+        id: setup-sbt
+        uses: ./.github/actions/setup-sbt
+        with:
+          sbt-version: '1.10.4'
+          scala-version: '3.3.1'
+          java-version: '21'
+          enable-cache: true
+      
+      # ========================================
+      # Build and test
+      # ========================================
+      - name: Build
+        run: sbt clean compile
+      
+      - name: Test
+        run: sbt test
+      
+      # ========================================
+      # Display build info
+      # ========================================
+      - name: Display Build Info
+        run: |
+          echo "SBT Version: ${{ steps.setup-sbt.outputs.sbt-version }}"
+          echo "SBT Path: ${{ steps.setup-sbt.outputs.sbt-path }}"
+          echo "Cache Hit: ${{ steps.setup-sbt.outputs.cache-hit }}"

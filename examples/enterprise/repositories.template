@@ -1,0 +1,11 @@
+# ================================================
+# SBT Repositories Configuration - Enterprise
+# ================================================
+# Generic template for enterprise Artifactory setup
+# Replace URLs with your company's Artifactory URLs
+# ================================================
+
+[repositories]
+local
+maven: https://artifacts.yourcompany.com/artifactory/maven-virtual/
+sbt: https://artifacts.yourcompany.com/artifactory/sbt-virtual/, [organization]/[module]/(scala_[scalaVersion]/)(sbt_[sbtVersion]/)[revision]/[type]s/[artifact](-[classifier]).[ext]

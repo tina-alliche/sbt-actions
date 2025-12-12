@@ -1,0 +1,77 @@
+# ================================================
+# Example Workflow - Enterprise with HashiCorp Vault
+# ================================================
+# Generic template for enterprise setup with Vault
+# Customize for your organization
+# ================================================
+
+name: SBT Build (Enterprise)
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  # Customize these for your organization
+  ARTIFACTORY_URL: https://artifacts.yourcompany.com
+  VAULT_URL: https://vault.yourcompany.com
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      # ========================================
+      # Checkout code
+      # ========================================
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      # ========================================
+      # Retrieve secrets from Vault
+      # ========================================
+      - name: Import Secrets from Vault
+        uses: hashicorp/vault-action@v3
+        with:
+          url: ${{ env.VAULT_URL }}
+          method: approle
+          roleId: ${{ secrets.VAULT_ROLE_ID }}
+          secretId: ${{ secrets.VAULT_SECRET_ID }}
+          secrets: |
+            secret/data/artifactory user | ARTIFACTORY_USER ;
+            secret/data/artifactory api-key | ARTIFACTORY_API_KEY ;
+          exportEnv: true
+      
+      # ========================================
+      # Setup SBT
+      # ========================================
+      - name: Setup SBT
+        id: setup-sbt
+        uses: ./.github/actions/setup-sbt
+        with:
+          sbt-version: '1.10.4'
+          scala-version: '3.3.1'
+          java-version: '21'
+          credentials-host: 'artifacts.yourcompany.com'
+          repositories-file: 'config/company/repositories'
+          enable-cache: true
+      
+      # ========================================
+      # Build and test
+      # ========================================
+      - name: Build
+        run: sbt clean compile
+      
+      - name: Test
+        run: sbt test
+      
+      # ========================================
+      # Display build info
+      # ========================================
+      - name: Display Build Info
+        run: |
+          echo "SBT Version: ${{ steps.setup-sbt.outputs.sbt-version }}"
+          echo "SBT Path: ${{ steps.setup-sbt.outputs.sbt-path }}"
+          echo "Cache Hit: ${{ steps.setup-sbt.outputs.cache-hit }}"

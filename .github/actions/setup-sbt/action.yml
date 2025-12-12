@@ -1,0 +1,274 @@
+name: 'Setup SBT'
+description: 'Setup SBT environment with Java, repositories, and credentials configuration'
+author: 'Your Name'
+
+inputs:
+  # ========================================
+  # Versions
+  # ========================================
+  sbt-version:
+    description: 'SBT version to install'
+    required: true
+    default: '1.10.4'
+  
+  scala-version:
+    description: 'Scala version (for information/documentation)'
+    required: false
+    default: '3.3.1'
+  
+  java-version:
+    description: 'Java version to setup'
+    required: true
+    default: '21'
+  
+  java-distribution:
+    description: 'Java distribution (temurin, zulu, adopt, etc.)'
+    required: false
+    default: 'temurin'
+  
+  # ========================================
+  # Repositories Configuration
+  # ========================================
+  repositories-file:
+    description: 'Path to custom SBT repositories file (if provided, will be copied to ~/.sbt/repositories)'
+    required: false
+    default: ''
+  
+  repositories-content:
+    description: 'Inline repositories configuration (if provided, will be written to ~/.sbt/repositories)'
+    required: false
+    default: ''
+  
+  # ========================================
+  # Credentials Configuration
+  # ========================================
+  credentials-realm:
+    description: 'Artifactory realm for credentials'
+    required: false
+    default: 'Artifactory Realm'
+  
+  credentials-host:
+    description: 'Artifactory host (e.g., artifacts.example.com) - if empty, credentials will not be configured'
+    required: false
+    default: ''
+  
+  # ========================================
+  # Cache Configuration
+  # ========================================
+  enable-cache:
+    description: 'Enable SBT caching (ivy2, sbt, coursier)'
+    required: false
+    default: 'true'
+  
+  cache-key-prefix:
+    description: 'Prefix for cache keys'
+    required: false
+    default: 'sbt'
+  
+  # ========================================
+  # SBT Download Configuration
+  # ========================================
+  download-sbt-from:
+    description: 'Where to download SBT from: "github" or "custom-url"'
+    required: false
+    default: 'github'
+  
+  sbt-download-url:
+    description: 'Custom URL to download SBT (only used if download-sbt-from=custom-url)'
+    required: false
+    default: ''
+  
+  # ========================================
+  # Advanced Options
+  # ========================================
+  sbt-opts:
+    description: 'Additional SBT options (will be added to SBT_OPTS environment variable)'
+    required: false
+    default: '-Dsbt.override.build.repos=true -Dsbt.log.noformat=true'
+  
+  working-directory:
+    description: 'Working directory for SBT operations'
+    required: false
+    default: '.'
+
+outputs:
+  sbt-version:
+    description: 'Installed SBT version'
+    value: ${{ steps.setup-info.outputs.sbt-version }}
+  
+  sbt-path:
+    description: 'Path to SBT installation'
+    value: ${{ steps.setup-info.outputs.sbt-path }}
+  
+  cache-hit:
+    description: 'Whether cache was restored'
+    value: ${{ steps.cache-sbt.outputs.cache-hit }}
+
+runs:
+  using: 'composite'
+  steps:
+    # ========================================
+    # Step 1: Setup Java
+    # ========================================
+    - name: Setup Java ${{ inputs.java-version }}
+      uses: actions/setup-java@v4
+      with:
+        distribution: ${{ inputs.java-distribution }}
+        java-version: ${{ inputs.java-version }}
+    
+    # ========================================
+    # Step 2: Cache SBT (if enabled)
+    # ========================================
+    - name: Generate cache key
+      if: inputs.enable-cache == 'true'
+      id: cache-key
+      shell: bash
+      run: |
+        # Generate hash from build files
+        if [ -f "${{ inputs.working-directory }}/build.sbt" ]; then
+          BUILD_HASH=$(find ${{ inputs.working-directory }} -name "build.sbt" -o -name "plugins.sbt" -type f -exec sha256sum {} + | sort | sha256sum | cut -d' ' -f1)
+        else
+          BUILD_HASH="no-build-files"
+        fi
+        echo "build-hash=${BUILD_HASH}" >> $GITHUB_OUTPUT
+    
+    - name: Cache ivy2
+      if: inputs.enable-cache == 'true'
+      uses: actions/cache@v4
+      with:
+        path: ~/.ivy2/cache
+        key: ${{ inputs.cache-key-prefix }}-ivy2-cache-${{ runner.os }}-${{ steps.cache-key.outputs.build-hash }}
+        restore-keys: |
+          ${{ inputs.cache-key-prefix }}-ivy2-cache-${{ runner.os }}-
+    
+    - name: Cache ivy2 local
+      if: inputs.enable-cache == 'true'
+      uses: actions/cache@v4
+      with:
+        path: ~/.ivy2/local
+        key: ${{ inputs.cache-key-prefix }}-ivy2-local-cache-${{ runner.os }}-${{ steps.cache-key.outputs.build-hash }}
+        restore-keys: |
+          ${{ inputs.cache-key-prefix }}-ivy2-local-cache-${{ runner.os }}-
+    
+    - name: Cache SBT
+      if: inputs.enable-cache == 'true'
+      id: cache-sbt
+      uses: actions/cache@v4
+      with:
+        path: ~/.sbt
+        key: ${{ inputs.cache-key-prefix }}-sbt-cache-${{ runner.os }}-${{ steps.cache-key.outputs.build-hash }}
+        restore-keys: |
+          ${{ inputs.cache-key-prefix }}-sbt-cache-${{ runner.os }}-
+    
+    - name: Cache Coursier
+      if: inputs.enable-cache == 'true'
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/coursier
+        key: ${{ inputs.cache-key-prefix }}-coursier-cache-${{ runner.os }}-${{ steps.cache-key.outputs.build-hash }}
+        restore-keys: |
+          ${{ inputs.cache-key-prefix }}-coursier-cache-${{ runner.os }}-
+    
+    - name: Cache SBT installation
+      if: inputs.enable-cache == 'true'
+      uses: actions/cache@v4
+      with:
+        path: ${{ inputs.working-directory }}/sbt-install/${{ inputs.sbt-version }}
+        key: ${{ inputs.cache-key-prefix }}-sbt-${{ inputs.sbt-version }}-zip
+        restore-keys: |
+          ${{ inputs.cache-key-prefix }}-sbt-${{ inputs.sbt-version }}-
+    
+    # ========================================
+    # Step 3: Configure Credentials
+    # ========================================
+    - name: Configure Artifactory Credentials
+      if: inputs.credentials-host != ''
+      shell: bash
+      env:
+        CREDENTIALS_REALM: ${{ inputs.credentials-realm }}
+        CREDENTIALS_HOST: ${{ inputs.credentials-host }}
+      run: |
+        chmod +x ${{ github.action_path }}/scripts/configure-credentials.sh
+        ${{ github.action_path }}/scripts/configure-credentials.sh
+    
+    # ========================================
+    # Step 4: Configure Repositories
+    # ========================================
+    - name: Configure SBT Repositories
+      shell: bash
+      env:
+        REPOSITORIES_FILE: ${{ inputs.repositories-file }}
+        REPOSITORIES_CONTENT: ${{ inputs.repositories-content }}
+      run: |
+        chmod +x ${{ github.action_path }}/scripts/configure-repositories.sh
+        ${{ github.action_path }}/scripts/configure-repositories.sh
+    
+    # ========================================
+    # Step 5: Install SBT
+    # ========================================
+    - name: Download and Install SBT
+      shell: bash
+      env:
+        SBT_VERSION: ${{ inputs.sbt-version }}
+        DOWNLOAD_FROM: ${{ inputs.download-sbt-from }}
+        CUSTOM_URL: ${{ inputs.sbt-download-url }}
+        WORKING_DIR: ${{ inputs.working-directory }}
+      run: |
+        chmod +x ${{ github.action_path }}/scripts/setup-sbt.sh
+        ${{ github.action_path }}/scripts/setup-sbt.sh
+    
+    # ========================================
+    # Step 6: Set SBT Environment
+    # ========================================
+    - name: Configure SBT Environment
+      shell: bash
+      run: |
+        # Add SBT to PATH
+        echo "${{ inputs.working-directory }}/sbt-install/${{ inputs.sbt-version }}/sbt/bin" >> $GITHUB_PATH
+        
+        # Set SBT_OPTS
+        if [ -n "${{ inputs.sbt-opts }}" ]; then
+          echo "SBT_OPTS=${{ inputs.sbt-opts }}" >> $GITHUB_ENV
+        fi
+        
+        echo "✓ SBT environment configured"
+    
+    # ========================================
+    # Step 7: Verify Installation
+    # ========================================
+    - name: Verify SBT Installation
+      id: setup-info
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        echo "=== SBT Installation Verification ==="
+        
+        # Check SBT is in PATH
+        if ! command -v sbt &> /dev/null; then
+          echo "ERROR: sbt command not found in PATH"
+          exit 1
+        fi
+        
+        # Get SBT version
+        SBT_INSTALLED_VERSION=$(sbt sbtVersion 2>&1 | grep -oP '\d+\.\d+\.\d+' | head -n1)
+        echo "Installed SBT version: $SBT_INSTALLED_VERSION"
+        
+        # Get SBT path
+        SBT_PATH=$(which sbt)
+        echo "SBT path: $SBT_PATH"
+        
+        # Check Java version
+        echo ""
+        echo "Java version:"
+        java -version
+        
+        # Output for GitHub Actions
+        echo "sbt-version=$SBT_INSTALLED_VERSION" >> $GITHUB_OUTPUT
+        echo "sbt-path=$SBT_PATH" >> $GITHUB_OUTPUT
+        
+        echo ""
+        echo "✓ SBT setup completed successfully"
+
+branding:
+  icon: 'package'
+  color: 'blue'

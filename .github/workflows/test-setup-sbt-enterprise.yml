@@ -1,0 +1,117 @@
+name: Test Setup SBT - Enterprise
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test-with-repositories-file:
+    name: Test with Custom Repositories File
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup SBT with Custom Repositories
+        id: setup-sbt
+        uses: ./.github/actions/setup-sbt
+        with:
+          sbt-version: '1.10.4'
+          scala-version: '3.3.1'
+          java-version: '21'
+          repositories-file: 'test-configs/repositories-test'
+          enable-cache: true
+
+      - name: Verify SBT Installation
+        run: |
+          echo "=== SBT Version ==="
+          sbt sbtVersion
+          echo ""
+          echo "=== Java Version ==="
+          java -version
+
+      - name: Verify Repositories Configuration
+        run: |
+          echo "=== Checking Repositories Configuration ==="
+          if [ -f ~/.sbt/repositories ]; then
+            echo "✓ Repositories file exists"
+            echo ""
+            echo "Content:"
+            cat ~/.sbt/repositories
+          else
+            echo "✗ Repositories file not found!"
+            exit 1
+          fi
+
+      - name: Create Test Project
+        run: |
+          echo "=== Creating Test Project ==="
+          mkdir -p test-project/project
+          echo 'scalaVersion := "3.3.1"' > test-project/build.sbt
+          echo 'sbt.version=1.10.4' > test-project/project/build.properties
+          cat >> test-project/build.sbt << 'EOF'
+          
+          libraryDependencies += "org.scala-lang.modules" %% "scala-parser-combinators" % "2.3.0"
+          EOF
+          echo "✓ Test project created with dependencies"
+
+      - name: Compile and Resolve Dependencies
+        run: |
+          echo "=== Compiling with Custom Repositories ==="
+          cd test-project
+          sbt compile
+          echo "✓ Compilation successful - repositories working!"
+
+      - name: Display Setup Info
+        run: |
+          echo "=== Setup Summary ==="
+          echo "SBT Version: ${{ steps.setup-sbt.outputs.sbt-version }}"
+          echo "SBT Path: ${{ steps.setup-sbt.outputs.sbt-path }}"
+          echo "Cache Hit: ${{ steps.setup-sbt.outputs.cache-hit }}"
+
+  test-with-repositories-content:
+    name: Test with Inline Repositories Config
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup SBT with Inline Repositories
+        uses: ./.github/actions/setup-sbt
+        with:
+          sbt-version: '1.10.4'
+          scala-version: '3.3.1'
+          java-version: '21'
+          repositories-content: |
+            [repositories]
+            local
+            maven-central: https://repo1.maven.org/maven2/
+            typesafe: https://repo.typesafe.com/typesafe/releases/
+          enable-cache: true
+
+      - name: Verify Repositories Configuration
+        run: |
+          echo "=== Checking Inline Repositories Configuration ==="
+          if [ -f ~/.sbt/repositories ]; then
+            echo "✓ Repositories file exists"
+            echo ""
+            echo "Content:"
+            cat ~/.sbt/repositories
+          else
+            echo "✗ Repositories file not found!"
+            exit 1
+          fi
+
+      - name: Create and Compile Test Project
+        run: |
+          mkdir -p test-project/project
+          echo 'scalaVersion := "3.3.1"' > test-project/build.sbt
+          echo 'sbt.version=1.10.4' > test-project/project/build.properties
+          cd test-project
+          sbt compile
+          echo "✓ Inline repositories configuration working!"

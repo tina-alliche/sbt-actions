@@ -1,0 +1,18 @@
+# ================================================
+# Test Configuration - Simulates Enterprise Setup
+# ================================================
+# This uses public repositories with enterprise syntax
+# to test the repositories-file functionality
+# ================================================
+
+[repositories]
+local
+
+# Maven Central with custom naming (simulates enterprise proxy)
+maven-central-proxy: https://repo1.maven.org/maven2/
+
+# Typesafe/Lightbend releases (simulates enterprise SBT repo)
+typesafe-releases: https://repo.typesafe.com/typesafe/releases/, [organization]/[module]/(scala_[scalaVersion]/)(sbt_[sbtVersion]/)[revision]/[type]s/[artifact](-[classifier]).[ext]
+
+# Sonatype releases (simulates additional enterprise repo)
+sonatype-releases: https://oss.sonatype.org/content/repositories/releases/

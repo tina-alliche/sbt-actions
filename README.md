@@ -1,7 +1,10 @@
 # Generic SBT GitHub Actions
 
-**Reusable GitHub Actions for SBT projects** - Works with public repositories (Maven Central) and private Artifactory instances.
+![Test Public](https://github.com/tina-alliche/sbt-actions/workflows/Test%20Setup%20SBT/badge.svg)
+![Test Enterprise](https://github.com/tina-alliche/sbt-actions/workflows/Test%20Setup%20SBT%20-%20Enterprise/badge.svg)
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
 
+**Reusable GitHub Actions for SBT projects** - Works with public repositories (Maven Central) and private Artifactory instances.
 ## 🎯 Features
 
 - ✅ **Generic and Reusable**: Works with any Artifactory or public repositories

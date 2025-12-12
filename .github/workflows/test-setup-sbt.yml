@@ -32,11 +32,18 @@ jobs:
           echo ""
           echo "=== Java Version ==="
           java -version
-          
-          echo ""
-          echo "=== Test Simple SBT Project ==="
+
+      - name: Create Test Project
+        run: |
+          echo "=== Creating Test Project ==="
           mkdir -p test-project/project
           echo 'scalaVersion := "3.3.1"' > test-project/build.sbt
           echo 'sbt.version=1.10.4' > test-project/project/build.properties
-          cd test-project
+          echo "✓ Test project created"
+
+      - name: Compile Test Project
+        working-directory: test-project
+        run: |
+          echo "=== Compiling Test Project ==="
           sbt compile
+          echo "✓ Compilation successful"

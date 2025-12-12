@@ -1,0 +1,42 @@
+name: Test Setup SBT
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test-maven-central:
+    name: Test with Maven Central
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup SBT
+        uses: ./.github/actions/setup-sbt
+        with:
+          sbt-version: '1.10.4'
+          scala-version: '3.3.1'
+          java-version: '21'
+          enable-cache: true
+
+      - name: Verify SBT Installation
+        run: |
+          echo "=== SBT Version ==="
+          sbt sbtVersion
+          
+          echo ""
+          echo "=== Java Version ==="
+          java -version
+          
+          echo ""
+          echo "=== Test Simple SBT Project ==="
+          mkdir -p test-project/project
+          echo 'scalaVersion := "3.3.1"' > test-project/build.sbt
+          echo 'sbt.version=1.10.4' > test-project/project/build.properties
+          cd test-project
+          sbt compile

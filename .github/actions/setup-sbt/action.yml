@@ -223,14 +223,16 @@ runs:
     - name: Configure SBT Environment
       shell: bash
       run: |
-        # Add SBT to PATH
-        echo "${{ inputs.working-directory }}/sbt-install/${{ inputs.sbt-version }}/sbt/bin" >> $GITHUB_PATH
-        
+        # Add SBT to PATH with absolute path
+        SBT_BIN_PATH="${GITHUB_WORKSPACE}/${{ inputs.working-directory }}/sbt-install/${{ inputs.sbt-version }}/sbt/bin"
+        echo "$SBT_BIN_PATH" >> $GITHUB_PATH
+        echo "SBT added to PATH: $SBT_BIN_PATH"
+
         # Set SBT_OPTS
         if [ -n "${{ inputs.sbt-opts }}" ]; then
           echo "SBT_OPTS=${{ inputs.sbt-opts }}" >> $GITHUB_ENV
         fi
-        
+
         echo "✓ SBT environment configured"
     
     # ========================================

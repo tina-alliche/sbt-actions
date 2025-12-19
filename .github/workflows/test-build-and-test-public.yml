@@ -1,0 +1,208 @@
+name: Test Build and Test SBT - Public
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - '.github/actions/build-and-test-sbt/**'
+      - '.github/actions/setup-sbt/**'
+      - '.github/workflows/test-build-and-test-public.yml'
+      - 'test-project/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/actions/build-and-test-sbt/**'
+      - '.github/actions/setup-sbt/**'
+      - 'test-project/**'
+  workflow_dispatch:
+
+jobs:
+  test-build-and-test-public:
+    name: Test Build and Test (Maven Central)
+    runs-on: ubuntu-latest
+    
+    steps:
+      # ========================================
+      # Setup
+      # ========================================
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+      
+      # ========================================
+      # Test Action: Build and Test
+      # ========================================
+      - name: Build and Test SBT Project (Public)
+        id: build-test
+        uses: ./.github/actions/build-and-test-sbt
+        with:
+          # Setup params (Maven Central par défaut)
+          sbt-version: '1.10.4'
+          scala-version: '3.3.1'
+          java-version: '21'
+          # PAS de artifactory-host = Maven Central
+          # PAS de repositories-file = défaut
+          enable-cache: true
+          
+          # Build params
+          sbt-commands: 'clean compile test'
+          working-directory: './test-project'
+          
+          # Artifact params
+          upload-artifacts: true
+          artifact-name-prefix: 'test-public'
+          artifact-path: './test-project/target/**/*.jar'
+          artifact-retention-days: 1
+          artifact-if-no-files-found: 'warn'
+      
+      # ========================================
+      # Verify Outputs
+      # ========================================
+      - name: Verify Build Outputs
+        run: |
+          echo "========================================="
+          echo "Verifying Build Outputs"
+          echo "========================================="
+          
+          # Check artifact name
+          if [ -z "${{ steps.build-test.outputs.action-artifact-name }}" ]; then
+            echo "❌ ERROR: action-artifact-name is empty"
+            exit 1
+          else
+            echo "✅ Artifact Name: ${{ steps.build-test.outputs.action-artifact-name }}"
+          fi
+          
+          # Check build status
+          if [ "${{ steps.build-test.outputs.build-status }}" != "success" ]; then
+            echo "❌ ERROR: Build status is not success"
+            exit 1
+          else
+            echo "✅ Build Status: ${{ steps.build-test.outputs.build-status }}"
+          fi
+          
+          # Check artifact uploaded
+          if [ "${{ steps.build-test.outputs.artifact-uploaded }}" != "true" ]; then
+            echo "❌ ERROR: Artifact not uploaded"
+            exit 1
+          else
+            echo "✅ Artifact Uploaded: ${{ steps.build-test.outputs.artifact-uploaded }}"
+          fi
+          
+          # Check SBT version
+          if [ -z "${{ steps.build-test.outputs.sbt-version }}" ]; then
+            echo "❌ ERROR: sbt-version is empty"
+            exit 1
+          else
+            echo "✅ SBT Version: ${{ steps.build-test.outputs.sbt-version }}"
+          fi
+          
+          # Check cache-hit output exists
+          echo "✅ Cache Hit: ${{ steps.build-test.outputs.cache-hit }}"
+          
+          echo ""
+          echo "========================================="
+          echo "✅ All Outputs Verified Successfully"
+          echo "========================================="
+      
+      # ========================================
+      # Verify Build Files
+      # ========================================
+      - name: Verify Build Files
+        run: |
+          echo "========================================="
+          echo "Verifying Build Files"
+          echo "========================================="
+          
+          cd test-project
+          
+          # Check if compiled classes exist
+          if [ -d "target/scala-3.3.1/classes" ]; then
+            echo "✅ Compiled classes found"
+            ls -la target/scala-3.3.1/classes/
+          else
+            echo "❌ ERROR: Compiled classes not found"
+            exit 1
+          fi
+          
+          # Check if test classes exist
+          if [ -d "target/scala-3.3.1/test-classes" ]; then
+            echo "✅ Test classes found"
+            ls -la target/scala-3.3.1/test-classes/
+          else
+            echo "⚠️  WARNING: Test classes not found (may not have tests)"
+          fi
+          
+          echo ""
+          echo "========================================="
+          echo "✅ Build Files Verified"
+          echo "========================================="
+      
+      # ========================================
+      # Test Artifact Download
+      # ========================================
+      - name: Download Artifact (Test)
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ steps.build-test.outputs.action-artifact-name }}
+          path: ./downloaded-artifacts
+      
+      - name: Verify Downloaded Artifact
+        run: |
+          echo "========================================="
+          echo "Verifying Downloaded Artifact"
+          echo "========================================="
+          
+          if [ -d "./downloaded-artifacts" ]; then
+            echo "✅ Artifacts directory exists"
+            
+            echo ""
+            echo "Downloaded files:"
+            find ./downloaded-artifacts -type f
+            
+            FILE_COUNT=$(find ./downloaded-artifacts -type f | wc -l)
+            echo ""
+            echo "Total files: $FILE_COUNT"
+            
+            if [ "$FILE_COUNT" -eq 0 ]; then
+              echo "⚠️  WARNING: No files downloaded (this is OK if no JARs were created)"
+            else
+              echo "✅ Files downloaded successfully"
+            fi
+          else
+            echo "❌ ERROR: Artifacts directory not found"
+            exit 1
+          fi
+          
+          echo ""
+          echo "========================================="
+          echo "✅ Artifact Download Test Completed"
+          echo "========================================="
+      
+      # ========================================
+      # Summary
+      # ========================================
+      - name: Test Summary
+        if: always()
+        run: |
+          echo ""
+          echo "========================================="
+          echo "TEST SUMMARY - BUILD AND TEST (PUBLIC)"
+          echo "========================================="
+          echo ""
+          echo "Action Tested: build-and-test-sbt"
+          echo "Mode: Public (Maven Central)"
+          echo "SBT Version: ${{ steps.build-test.outputs.sbt-version }}"
+          echo "Build Status: ${{ steps.build-test.outputs.build-status }}"
+          echo "Artifact Name: ${{ steps.build-test.outputs.action-artifact-name }}"
+          echo "Artifact Uploaded: ${{ steps.build-test.outputs.artifact-uploaded }}"
+          echo "Cache Hit: ${{ steps.build-test.outputs.cache-hit }}"
+          echo ""
+          echo "========================================="
+          
+          if [ "${{ steps.build-test.outputs.build-status }}" == "success" ]; then
+            echo "✅✅✅ ALL TESTS PASSED ✅✅✅"
+          else
+            echo "❌❌❌ TESTS FAILED ❌❌❌"
+            exit 1
+          fi
+          
+          echo "========================================="

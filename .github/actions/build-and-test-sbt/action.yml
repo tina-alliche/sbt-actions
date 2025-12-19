@@ -10,32 +10,32 @@ inputs:
     description: 'Version SBT à installer'
     required: false
     default: '1.10.4'
-  
+
   scala-version:
     description: 'Version Scala (pour documentation)'
     required: false
     default: '3.3.1'
-  
+
   java-version:
     description: 'Version Java à configurer'
     required: false
     default: '21'
-  
+
   java-distribution:
     description: 'Distribution Java (temurin, zulu, adopt, etc.)'
     required: false
     default: 'temurin'
-  
+
   artifactory-host:
     description: 'Hostname Artifactory (ex: artifacts.exemple.com)'
     required: false
     default: ''
-  
+
   credentials-realm:
     description: 'Realm Artifactory'
     required: false
     default: 'Artifactory Realm'
-  
+
   repositories-file:
     description: |
       Repositories configuration
@@ -44,37 +44,37 @@ inputs:
       - Chemin custom : 'config/repositories'
     required: false
     default: 'v1'
-  
+
   repositories-content:
     description: 'Configuration repositories inline (YAML)'
     required: false
     default: ''
-  
+
   enable-cache:
     description: 'Activer le cache SBT (ivy2, sbt, coursier)'
     required: false
     default: 'true'
-  
+
   cache-key-prefix:
     description: 'Préfixe des clés de cache'
     required: false
     default: 'sbt'
-  
+
   download-sbt-from:
     description: 'Source téléchargement SBT (github ou custom-url)'
     required: false
     default: 'github'
-  
+
   sbt-download-url:
     description: 'URL custom pour télécharger SBT'
     required: false
     default: ''
-  
+
   working-directory:
     description: 'Répertoire de travail'
     required: false
     default: '.'
-  
+
   # ========================================
   # Build & Test Inputs
   # ========================================
@@ -82,12 +82,12 @@ inputs:
     description: 'Commandes SBT à exécuter'
     required: false
     default: 'clean compile test'
-  
+
   sbt-opts:
     description: 'Options SBT additionnelles (SBT_OPTS)'
     required: false
     default: '-Dsbt.override.build.repos=true -Dsbt.log.noformat=true'
-  
+
   env-vars:
     description: |
       Variables d'environnement additionnelles (format YAML multi-ligne)
@@ -96,12 +96,12 @@ inputs:
         LANG: en_US.UTF-8
     required: false
     default: ''
-  
+
   continue-on-error:
     description: 'Continue même si les commandes SBT échouent'
     required: false
     default: 'false'
-  
+
   # ========================================
   # Artifact Upload Configuration
   # ========================================
@@ -109,7 +109,7 @@ inputs:
     description: 'Upload les artifacts vers GitHub Actions'
     required: false
     default: 'true'
-  
+
   artifact-name-prefix:
     description: |
       Préfixe du nom d'artifact
@@ -117,17 +117,17 @@ inputs:
       Suffixe aléatoire (10 chars) ajouté automatiquement
     required: false
     default: ''
-  
+
   artifact-path:
     description: 'Pattern des fichiers à uploader (compatible glob)'
     required: false
     default: '${{ github.workspace }}/**/target/universal/*.zip'
-  
+
   artifact-retention-days:
     description: 'Jours de rétention des artifacts'
     required: false
     default: '1'
-  
+
   artifact-if-no-files-found:
     description: 'Comportement si aucun fichier trouvé (error/warn/ignore)'
     required: false
@@ -137,19 +137,19 @@ outputs:
   action-artifact-name:
     description: 'Nom de l''artifact uploadé (compatible ancien workflow)'
     value: ${{ steps.generate-artifact-name.outputs.artifact-name }}
-  
+
   build-status:
     description: 'Statut du build (success/failure)'
     value: ${{ steps.build.outputs.status }}
-  
+
   artifact-uploaded:
     description: 'Artifact uploadé (true/false)'
     value: ${{ steps.set-upload-status.outputs.uploaded }}
-  
+
   sbt-version:
     description: 'Version SBT installée'
     value: ${{ steps.setup-sbt.outputs.sbt-version }}
-  
+
   cache-hit:
     description: 'Cache restauré (true/false)'
     value: ${{ steps.setup-sbt.outputs.cache-hit }}
@@ -162,7 +162,7 @@ runs:
     # ========================================
     - name: Setup SBT Environment
       id: setup-sbt
-      uses: ../../setup-sbt
+      uses: ./.github/actions/setup-sbt
       with:
         sbt-version: ${{ inputs.sbt-version }}
         scala-version: ${{ inputs.scala-version }}
@@ -193,14 +193,14 @@ runs:
         while IFS=': ' read -r key value || [ -n "$key" ]; do
           # Skip empty lines and comments
           [[ -z "$key" || "$key" =~ ^[[:space:]]*# ]] && continue
-          
+        
           # Trim whitespace
           key=$(echo "$key" | xargs)
           value=$(echo "$value" | xargs)
-          
+        
           # Remove quotes if present
           value=$(echo "$value" | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//")
-          
+        
           if [ -n "$key" ] && [ -n "$value" ]; then
             echo "Setting: $key=$value"
             echo "$key=$value" >> $GITHUB_ENV

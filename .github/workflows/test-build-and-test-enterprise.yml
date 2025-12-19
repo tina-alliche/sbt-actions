@@ -3,8 +3,17 @@ name: Test Build and Test SBT - Enterprise
 on:
   push:
     branches: [main, develop]
+    paths:
+      - '.github/actions/build-and-test-sbt/**'
+      - '.github/actions/setup-sbt/**'
+      - '.github/workflows/test-build-and-test-enterprise.yml'
+      - 'test-configs/**'
   pull_request:
     branches: [main]
+    paths:
+      - '.github/actions/build-and-test-sbt/**'
+      - '.github/actions/setup-sbt/**'
+      - 'test-configs/**'
   workflow_dispatch:
 
 jobs:

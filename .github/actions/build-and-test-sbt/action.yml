@@ -313,8 +313,9 @@ runs:
           PREFIX="${{ github.event.repository.name }}"
         fi
         
-        # Generate random suffix (10 alphanumeric chars like mktemp -u XXXXXXXXXX)
-        RANDOM_SUFFIX=$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 10)
+        # Generate random suffix (10 alphanumeric chars)
+        # Use head to limit urandom reading first, then filter (avoids broken pipe)
+        RANDOM_SUFFIX=$(head -c 100 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 10)
         
         # Combine prefix and suffix
         ARTIFACT_NAME="${PREFIX}-${RANDOM_SUFFIX}"

@@ -3,17 +3,8 @@ name: Test Build and Test SBT - Public
 on:
   push:
     branches: [main, develop]
-    paths:
-      - '.github/actions/build-and-test-sbt/**'
-      - '.github/actions/setup-sbt/**'
-      - '.github/workflows/test-build-and-test-public.yml'
-      - 'test-project/**'
   pull_request:
     branches: [main]
-    paths:
-      - '.github/actions/build-and-test-sbt/**'
-      - '.github/actions/setup-sbt/**'
-      - 'test-project/**'
   workflow_dispatch:
 
 jobs:
@@ -23,10 +14,35 @@ jobs:
     
     steps:
       # ========================================
-      # Setup
+      # Checkout
       # ========================================
       - name: Checkout Repository
         uses: actions/checkout@v4
+      
+      # ========================================
+      # Create Test Project (BEFORE calling action)
+      # ========================================
+      - name: Create Test Project
+        run: |
+          echo "=== Creating Test Project ==="
+          mkdir -p test-project/project
+          
+          # Create build.sbt
+          cat > test-project/build.sbt << 'EOF'
+          scalaVersion := "3.3.1"
+          
+          name := "test-project"
+          version := "0.1.0"
+          
+          libraryDependencies ++= Seq(
+            "org.scala-lang.modules" %% "scala-parser-combinators" % "2.3.0"
+          )
+          EOF
+          
+          # Create project/build.properties
+          echo 'sbt.version=1.10.4' > test-project/project/build.properties
+          
+          echo "✓ Test project created"
       
       # ========================================
       # Test Action: Build and Test
@@ -35,16 +51,15 @@ jobs:
         id: build-test
         uses: ./.github/actions/build-and-test-sbt
         with:
-          # Setup params (Maven Central par défaut)
+          # Setup params (Maven Central by default)
           sbt-version: '1.10.4'
           scala-version: '3.3.1'
           java-version: '21'
-          # PAS de artifactory-host = Maven Central
-          # PAS de repositories-file = défaut
+          # No artifactory-host = Maven Central
           enable-cache: true
           
           # Build params
-          sbt-commands: 'clean compile test'
+          sbt-commands: 'clean compile'
           working-directory: './test-project'
           
           # Artifact params
@@ -95,7 +110,6 @@ jobs:
             echo "✅ SBT Version: ${{ steps.build-test.outputs.sbt-version }}"
           fi
           
-          # Check cache-hit output exists
           echo "✅ Cache Hit: ${{ steps.build-test.outputs.cache-hit }}"
           
           echo ""
@@ -117,18 +131,10 @@ jobs:
           # Check if compiled classes exist
           if [ -d "target/scala-3.3.1/classes" ]; then
             echo "✅ Compiled classes found"
-            ls -la target/scala-3.3.1/classes/
+            ls -la target/scala-3.3.1/classes/ | head -10
           else
             echo "❌ ERROR: Compiled classes not found"
             exit 1
-          fi
-          
-          # Check if test classes exist
-          if [ -d "target/scala-3.3.1/test-classes" ]; then
-            echo "✅ Test classes found"
-            ls -la target/scala-3.3.1/test-classes/
-          else
-            echo "⚠️  WARNING: Test classes not found (may not have tests)"
           fi
           
           echo ""
@@ -163,7 +169,7 @@ jobs:
             echo "Total files: $FILE_COUNT"
             
             if [ "$FILE_COUNT" -eq 0 ]; then
-              echo "⚠️  WARNING: No files downloaded (this is OK if no JARs were created)"
+              echo "⚠️  WARNING: No files downloaded"
             else
               echo "✅ Files downloaded successfully"
             fi

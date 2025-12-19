@@ -20,15 +20,33 @@ Documentation des workflows de test pour l'action `build-and-test-sbt`.
 - ✅ Artifacts uploadés
 - ✅ Artifacts téléchargeables
 
+**Pattern Utilisé :**
+```yaml
+steps:
+  - Checkout
+  - Create Test Project  # AVANT d'appeler l'action
+  - Build and Test       # Avec working-directory: './test-project'
+  - Verify Outputs
+```
+
 **Configuration :**
 ```yaml
-with:
-  sbt-version: '1.10.4'
-  scala-version: '3.3.1'
-  java-version: '21'
-  # PAS de artifactory-host
-  # PAS de repositories-file
-  sbt-commands: 'clean compile test'
+- name: Create Test Project
+  run: |
+    mkdir -p test-project/project
+    cat > test-project/build.sbt << 'EOF'
+    scalaVersion := "3.3.1"
+    name := "test-project"
+    libraryDependencies += "org.scala-lang.modules" %% "scala-parser-combinators" % "2.3.0"
+    EOF
+    echo 'sbt.version=1.10.4' > test-project/project/build.properties
+
+- uses: ./.github/actions/build-and-test-sbt
+  with:
+    sbt-version: '1.10.4'
+    java-version: '21'
+    sbt-commands: 'clean compile'
+    working-directory: './test-project'
 ```
 
 **Quand il se lance :**
@@ -37,7 +55,6 @@ with:
 - Changements dans :
   - `.github/actions/build-and-test-sbt/**`
   - `.github/actions/setup-sbt/**`
-  - `test-project/**`
 - Manuellement via `workflow_dispatch`
 
 ---
@@ -55,18 +72,31 @@ with:
 - ✅ Fallback vers Maven Central si Artifactory fail
 - ✅ Structure de l'action (inputs, outputs)
 
+**Pattern Utilisé :**
+```yaml
+steps:
+  - Checkout
+  - Setup Mock Credentials
+  - Create Test Project  # AVANT d'appeler l'action
+  - Build and Test       # Avec Artifactory config
+  - Verify Setup
+  - Test Fallback        # Maven Central si Artifactory fail
+```
+
 **Configuration :**
 ```yaml
 env:
   ARTIFACTORY_USER: test-user
   ARTIFACTORY_API_KEY: test-api-key-mock-value
 
-with:
-  artifactory-host: 'artifacts.example.com'
-  repositories-file: 'test-configs/repositories-enterprise-test'
-  env-vars: |
-    TZ: America/Montreal
-    TEST_ENV: enterprise-test
+- uses: ./.github/actions/build-and-test-sbt
+  with:
+    artifactory-host: 'artifacts.example.com'
+    repositories-file: 'test-configs/repositories-test'
+    working-directory: './test-project'
+    env-vars: |
+      TZ: America/New_York
+      TEST_ENV: enterprise-test
 ```
 
 **Note Importante :**
@@ -75,43 +105,79 @@ Le test vérifie que :
 1. Setup est fait correctement
 2. Fallback vers Maven Central fonctionne
 
-**Quand il se lance :**
-- Push sur `main` ou `develop`
-- Pull request vers `main`
-- Changements dans :
-  - `.github/actions/build-and-test-sbt/**`
-  - `.github/actions/setup-sbt/**`
-  - `test-project/**`
-  - `test-configs/**`
-- Manuellement via `workflow_dispatch`
+---
+
+## 🎯 Pattern de Test Correct
+
+### **✅ BON Pattern (Utilisé)**
+
+```yaml
+steps:
+  # 1. Checkout
+  - uses: actions/checkout@v4
+  
+  # 2. Créer test-project AVANT
+  - name: Create Test Project
+    run: |
+      mkdir -p test-project/project
+      echo 'scalaVersion := "3.3.1"' > test-project/build.sbt
+      echo 'sbt.version=1.10.4' > test-project/project/build.properties
+  
+  # 3. Appeler l'action (projet existe déjà)
+  - uses: ./.github/actions/build-and-test-sbt
+    with:
+      working-directory: './test-project'
+      sbt-commands: 'clean compile'
+```
+
+**Pourquoi ça marche :**
+- Le projet existe AVANT l'action ✅
+- setup-sbt peut faire `cd ./test-project` sans erreur ✅
+- Les commandes SBT s'exécutent dans le bon dossier ✅
 
 ---
 
-## 🎯 Ce Que Chaque Test Vérifie
+### **❌ MAUVAIS Pattern (À Éviter)**
 
-### **Test Public**
+```yaml
+steps:
+  # 1. Checkout
+  - uses: actions/checkout@v4
+  
+  # 2. Appeler l'action SANS créer le projet
+  - uses: ./.github/actions/build-and-test-sbt
+    with:
+      working-directory: './test-project'  # ❌ N'existe pas encore !
+```
 
-| Vérification | Description |
-|--------------|-------------|
-| **Setup SBT** | Action appelle setup-sbt correctement |
-| **Maven Central** | Build fonctionne sans Artifactory |
-| **Build Success** | `sbt clean compile test` réussit |
-| **Outputs** | Tous les outputs sont présents et corrects |
-| **Artifact Upload** | Artifact uploadé avec nom correct |
-| **Artifact Download** | Artifact peut être téléchargé |
-| **Build Files** | Classes compilées existent |
+**Pourquoi ça échoue :**
+- setup-sbt essaie de `cd ./test-project` ❌
+- Le dossier n'existe pas ❌
+- Erreur : "No such file or directory" ❌
 
-### **Test Enterprise**
+---
 
-| Vérification | Description |
-|--------------|-------------|
-| **Setup SBT** | Action appelle setup-sbt avec bons params |
-| **Repositories** | Fichier `~/.sbt/repositories` créé |
-| **Credentials** | Fichiers credentials créés |
-| **Env Vars** | Variables d'env (TZ, etc.) configurées |
-| **Action Structure** | Fichiers action.yml, README.md existent |
-| **Inputs/Outputs** | Tous les inputs/outputs définis |
-| **Maven Fallback** | Build réussit avec Maven Central si Artifactory fail |
+## 🔧 Fichiers Requis
+
+### **Pour Test Public & Enterprise**
+
+```
+test-configs/
+└── repositories-test
+```
+
+**Créer `test-configs/repositories-test` si manquant :**
+
+```bash
+mkdir -p test-configs
+
+cat > test-configs/repositories-test << 'EOF'
+[repositories]
+local
+maven-central: https://repo1.maven.org/maven2/
+typesafe: https://repo.typesafe.com/typesafe/releases/
+EOF
+```
 
 ---
 
@@ -197,6 +263,30 @@ Test 3: Action Structure
 
 ## ❌ Debugging des Échecs
 
+### **Erreur : "No such file or directory"**
+
+```
+Error: cd: ./test-project: No such file or directory
+```
+
+**Cause :** Le projet test n'existe pas avant l'action
+
+**Solution :** Créer test-project AVANT d'appeler l'action (pattern correct ci-dessus)
+
+---
+
+### **Erreur : "Expected format {org}/{repo}[/path]@ref"**
+
+```
+Error: Expected format {org}/{repo}[/path]@ref. Actual '../../setup-sbt'
+```
+
+**Cause :** Chemin relatif invalide dans action.yml
+
+**Solution :** Utiliser chemin absolu `./.github/actions/setup-sbt`
+
+---
+
 ### **Test Public Échoue**
 
 **Cause possible 1 : Build SBT fail**
@@ -205,9 +295,9 @@ Test 3: Action Structure
 ```
 
 **Solution :**
-- Vérifier le projet test (`test-project/`)
 - Vérifier les dépendances dans `build.sbt`
 - Vérifier les versions (Scala, SBT)
+- Vérifier Maven Central est accessible
 
 **Cause possible 2 : Outputs vides**
 ```
@@ -219,131 +309,16 @@ Test 3: Action Structure
 - Vérifier les steps d'output
 - Vérifier le script de génération de nom
 
-**Cause possible 3 : Artifact pas uploadé**
-```
-❌ ERROR: Artifact not uploaded
-```
-
-**Solution :**
-- Vérifier le pattern de fichiers (`artifact-path`)
-- Vérifier que les JARs sont créés
-- Vérifier les permissions de fichiers
-
 ---
 
-### **Test Enterprise Échoue**
+### **Test Enterprise Échoue Complètement**
 
-**Cause possible 1 : Setup pas appelé**
-```
-❌ ERROR: Action does not call setup-sbt
-```
+**Cause : Fallback ne marche pas**
 
 **Solution :**
-- Vérifier `action.yml`
-- Vérifier la ligne `uses: ../../setup-sbt`
-
-**Cause possible 2 : Inputs manquants**
-```
-❌ ERROR: Input 'artifactory-host' not found
-```
-
-**Solution :**
-- Vérifier la section `inputs:` dans `action.yml`
-- Vérifier l'orthographe exacte
-
-**Cause possible 3 : Fallback échoue**
-```
-❌ ERROR: Fallback failed
-```
-
-**Solution :**
-- Problème avec Maven Central
-- Vérifier la connexion réseau
-- Vérifier les dépendances du projet test
-
----
-
-## 🔧 Modifier les Tests
-
-### **Ajouter une Vérification**
-
-Dans `test-build-and-test-public.yml` :
-
-```yaml
-- name: My Custom Verification
-  run: |
-    echo "Testing something specific"
-    
-    if [ condition ]; then
-      echo "✅ Test passed"
-    else
-      echo "❌ Test failed"
-      exit 1
-    fi
-```
-
-### **Changer les Paramètres de Test**
-
-```yaml
-- uses: ./.github/actions/build-and-test-sbt
-  with:
-    sbt-version: '1.9.0'      # Tester autre version
-    java-version: '17'        # Tester autre Java
-    sbt-commands: 'clean test' # Tester autres commandes
-```
-
-### **Ajouter un Nouveau Test**
-
-Créer un nouveau job dans le workflow :
-
-```yaml
-test-with-custom-config:
-  runs-on: ubuntu-latest
-  steps:
-    - uses: actions/checkout@v4
-    - uses: ./.github/actions/build-and-test-sbt
-      with:
-        # Configuration spécifique
-```
-
----
-
-## 📁 Fichiers Requis
-
-### **Pour Test Public**
-
-```
-.github/workflows/test-build-and-test-public.yml
-test-project/
-├── build.sbt
-├── project/
-│   └── build.properties
-└── src/
-    └── main/scala/
-```
-
-### **Pour Test Enterprise**
-
-```
-.github/workflows/test-build-and-test-enterprise.yml
-test-project/
-└── (même structure)
-test-configs/
-└── repositories-enterprise-test
-```
-
-**Créer `test-configs/repositories-enterprise-test` si manquant :**
-
-```bash
-mkdir -p test-configs
-
-cat > test-configs/repositories-enterprise-test << 'EOF'
-[repositories]
-local
-maven: https://artifacts.example.com/maven-virtual/
-sbt: https://artifacts.example.com/sbt-virtual/, [organization]/[module]/(scala_[scalaVersion]/)(sbt_[sbtVersion]/)[revision]/[type]s/[artifact](-[classifier]).[ext]
-EOF
-```
+- Vérifier que Maven Central est accessible
+- Vérifier que test-project est créé correctement
+- Vérifier les logs détaillés
 
 ---
 
@@ -352,10 +327,10 @@ EOF
 Avant de committer les workflows de test :
 
 - [ ] Les 2 workflows sont dans `.github/workflows/`
-- [ ] Projet test existe (`test-project/`)
-- [ ] Fichier `test-configs/repositories-enterprise-test` existe
+- [ ] Fichier `test-configs/repositories-test` existe
 - [ ] Action `build-and-test-sbt` est complète
 - [ ] Action `setup-sbt` est à jour
+- [ ] Pattern correct : Créer test-project AVANT l'action
 - [ ] Lancer les tests manuellement
 - [ ] Vérifier que les 2 tests passent
 
@@ -367,7 +342,7 @@ Avant de committer les workflows de test :
 
 1. ✅ Merger sur `main`
 2. ✅ Créer tag v1.1.0
-3. ✅ Tester sur projet DXP réel
+3. ✅ Tester sur projet réel
 4. ✅ Documenter dans README principal
 5. ✅ Annoncer aux équipes
 
@@ -384,4 +359,4 @@ Avant de committer les workflows de test :
 
 ---
 
-**Créé pour accompagner l'action build-and-test-sbt** 🚀
+**Créé par Tina Alliche pour l'action build-and-test-sbt** 🚀

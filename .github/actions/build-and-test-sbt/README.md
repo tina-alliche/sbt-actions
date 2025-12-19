@@ -113,10 +113,10 @@ GitHub Action to **build, test, and upload artifacts** for SBT projects.
 jobs:
   build:
     runs-on: ubuntu-latest
-
+    
     steps:
       - uses: actions/checkout@v4
-
+      
       - name: Build and Test
         uses: your-org/sbt-actions/.github/actions/build-and-test-sbt@v1
         with:
@@ -134,10 +134,10 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       artifact-name: ${{ steps.build.outputs.action-artifact-name }}
-
+    
     steps:
       - uses: actions/checkout@v4
-
+      
       - name: Import Secrets from Vault
         uses: hashicorp/vault-action@v3
         with:
@@ -149,7 +149,7 @@ jobs:
             secret/data/artifactory user | ARTIFACTORY_USER ;
             secret/data/artifactory api-key | ARTIFACTORY_API_KEY ;
           exportEnv: true
-
+      
       - name: Build and Test
         id: build
         uses: your-org/sbt-actions/.github/actions/build-and-test-sbt@v1
@@ -161,7 +161,7 @@ jobs:
           repositories-file: 'config/repositories'
           sbt-commands: 'clean compile test package'
           artifact-name-prefix: 'my-app'
-
+  
   # Next job uses the artifact
   deploy:
     needs: [build]
@@ -369,4 +369,4 @@ MIT License
 
 ---
 
-**Built with ❤️ for the SBT community**
+**Built with ❤️ for the SBT community by Tina Alliche**

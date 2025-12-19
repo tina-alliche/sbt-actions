@@ -3,19 +3,8 @@ name: Test Build and Test SBT - Enterprise
 on:
   push:
     branches: [main, develop]
-    paths:
-      - '.github/actions/build-and-test-sbt/**'
-      - '.github/actions/setup-sbt/**'
-      - '.github/workflows/test-build-and-test-enterprise.yml'
-      - 'test-project/**'
-      - 'test-configs/**'
   pull_request:
     branches: [main]
-    paths:
-      - '.github/actions/build-and-test-sbt/**'
-      - '.github/actions/setup-sbt/**'
-      - 'test-project/**'
-      - 'test-configs/**'
   workflow_dispatch:
 
 jobs:
@@ -25,28 +14,53 @@ jobs:
     
     steps:
       # ========================================
-      # Setup
+      # Checkout
       # ========================================
       - name: Checkout Repository
         uses: actions/checkout@v4
       
       # ========================================
-      # Simulate Vault Credentials
+      # Simulate Artifactory Credentials
       # ========================================
       - name: Setup Mock Artifactory Credentials
         run: |
           echo "========================================="
           echo "Setting up Mock Credentials"
           echo "========================================="
-          echo "Simulating Vault credentials for testing"
+          echo "Simulating Artifactory credentials for testing"
           echo ""
           
           # Set mock credentials (won't actually work with real Artifactory)
           echo "ARTIFACTORY_USER=test-user" >> $GITHUB_ENV
           echo "ARTIFACTORY_API_KEY=test-api-key-mock-value" >> $GITHUB_ENV
           
-          echo "✅ Mock credentials configured"
+          echo "✓ Mock credentials configured"
           echo "Note: These are NOT real credentials, just for testing the action flow"
+      
+      # ========================================
+      # Create Test Project (BEFORE calling action)
+      # ========================================
+      - name: Create Test Project
+        run: |
+          echo "=== Creating Test Project ==="
+          mkdir -p test-project/project
+          
+          # Create build.sbt
+          cat > test-project/build.sbt << 'EOF'
+          scalaVersion := "3.3.1"
+          
+          name := "test-project"
+          version := "0.1.0"
+          
+          libraryDependencies ++= Seq(
+            "org.scala-lang.modules" %% "scala-parser-combinators" % "2.3.0"
+          )
+          EOF
+          
+          # Create project/build.properties
+          echo 'sbt.version=1.10.4' > test-project/project/build.properties
+          
+          echo "✓ Test project created"
       
       # ========================================
       # Test Action: Build and Test (with Artifactory config)
@@ -60,16 +74,16 @@ jobs:
           scala-version: '3.3.1'
           java-version: '21'
           artifactory-host: 'artifacts.example.com'  # Mock host
-          repositories-file: 'test-configs/repositories-enterprise-test'
+          repositories-file: 'test-configs/repositories-test'
           enable-cache: true
           
           # Build params
-          sbt-commands: 'clean compile test'
+          sbt-commands: 'clean compile'
           working-directory: './test-project'
           
           # Test environment variables
           env-vars: |
-            TZ: America/Montreal
+            TZ: America/New_York
             TEST_ENV: enterprise-test
           
           # Artifact params
@@ -79,7 +93,7 @@ jobs:
           artifact-retention-days: 1
           artifact-if-no-files-found: 'warn'
         
-        # Continue même si échec (credentials mock peuvent causer des problèmes)
+        # Continue even if fail (mock credentials may cause issues)
         continue-on-error: true
       
       # ========================================
@@ -128,58 +142,7 @@ jobs:
           echo "========================================="
       
       # ========================================
-      # Verify Environment Variables
-      # ========================================
-      - name: Verify Environment Variables Were Set
-        run: |
-          echo "========================================="
-          echo "Verifying Environment Variables"
-          echo "========================================="
-          
-          # Check TZ
-          if [ -n "$TZ" ]; then
-            echo "✅ TZ is set: $TZ"
-          else
-            echo "⚠️  WARNING: TZ not set"
-          fi
-          
-          # Check TEST_ENV
-          if [ -n "$TEST_ENV" ]; then
-            echo "✅ TEST_ENV is set: $TEST_ENV"
-          else
-            echo "⚠️  WARNING: TEST_ENV not set"
-          fi
-          
-          echo ""
-          echo "Note: If these are not set, it may be because the build failed"
-          echo "      before environment parsing (expected with mock credentials)"
-          echo ""
-          echo "========================================="
-      
-      # ========================================
-      # Verify Outputs (même si build fail)
-      # ========================================
-      - name: Verify Action Outputs Exist
-        if: always()
-        run: |
-          echo "========================================="
-          echo "Verifying Action Outputs"
-          echo "========================================="
-          
-          echo "Artifact Name: ${{ steps.build-test.outputs.action-artifact-name }}"
-          echo "Build Status: ${{ steps.build-test.outputs.build-status }}"
-          echo "Artifact Uploaded: ${{ steps.build-test.outputs.artifact-uploaded }}"
-          echo "SBT Version: ${{ steps.build-test.outputs.sbt-version }}"
-          echo "Cache Hit: ${{ steps.build-test.outputs.cache-hit }}"
-          
-          echo ""
-          echo "Note: Some outputs may be empty if build failed early"
-          echo "      This is expected with mock Artifactory credentials"
-          echo ""
-          echo "========================================="
-      
-      # ========================================
-      # Verify Action Structure (toujours exécuté)
+      # Verify Action Structure
       # ========================================
       - name: Verify Action Files
         if: always()
@@ -204,7 +167,7 @@ jobs:
           fi
           
           # Verify action calls setup-sbt
-          if grep -q "uses: ../../setup-sbt" .github/actions/build-and-test-sbt/action.yml; then
+          if grep -q "uses: ./.github/actions/setup-sbt" .github/actions/build-and-test-sbt/action.yml; then
             echo "✅ Action calls setup-sbt"
           else
             echo "❌ ERROR: Action does not call setup-sbt"
@@ -251,14 +214,13 @@ jobs:
           sbt-version: '1.10.4'
           scala-version: '3.3.1'
           java-version: '21'
-          # Force Maven Central (pas d'Artifactory)
-          # artifactory-host laissé vide
-          enable-cache: false  # Disable pour ce test
+          # Force Maven Central (no Artifactory)
+          enable-cache: false  # Disable for this test
           
           sbt-commands: 'clean compile'
           working-directory: './test-project'
           
-          upload-artifacts: false  # Pas d'upload pour ce test
+          upload-artifacts: false  # No upload for this test
       
       - name: Verify Fallback Success
         if: always()

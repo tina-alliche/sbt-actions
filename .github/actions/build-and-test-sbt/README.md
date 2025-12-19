@@ -62,7 +62,7 @@ GitHub Action to **build, test, and upload artifacts** for SBT projects.
 | `scala-version` | Scala version | `3.3.1` |
 | `java-version` | Java version | `21` |
 | `java-distribution` | Java distribution | `temurin` |
-| `artifactory-host` | Artifactory hostname | `''` |
+| `artifactory-host` | Artifactory hostname (ex: artifacts.exemple.com) | `''` |
 | `credentials-realm` | Artifactory realm | `Artifactory Realm` |
 | `repositories-file` | Repositories config file path | `''` |
 | `repositories-content` | Inline repositories config (YAML) | `''` |

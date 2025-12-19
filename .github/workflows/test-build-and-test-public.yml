@@ -33,6 +33,7 @@ jobs:
         run: |
           echo "=== Creating Test Project ==="
           mkdir -p test-project/project
+          mkdir -p test-project/src/main/scala
           
           # Create build.sbt
           cat > test-project/build.sbt << 'EOF'
@@ -48,6 +49,15 @@ jobs:
           
           # Create project/build.properties
           echo 'sbt.version=1.10.4' > test-project/project/build.properties
+          
+          # Create a simple Scala file
+          cat > test-project/src/main/scala/Hello.scala << 'EOF'
+          object Hello {
+            def main(args: Array[String]): Unit = {
+              println("Hello from test!")
+            }
+          }
+          EOF
           
           echo "✓ Test project created"
       

@@ -81,7 +81,7 @@ inputs:
   sbt-commands:
     description: 'Commandes SBT à exécuter'
     required: false
-    default: 'clean compile test'
+    default: 'clean compile jacocoAggregate dist'
   
   sbt-opts:
     description: 'Options SBT additionnelles (SBT_OPTS)'

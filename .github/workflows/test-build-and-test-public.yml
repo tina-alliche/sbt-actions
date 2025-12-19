@@ -35,20 +35,42 @@ jobs:
           mkdir -p test-project/project
           mkdir -p test-project/src/main/scala
           
+          # Create project/build.properties
+          cat > test-project/project/build.properties << 'EOF'
+          sbt.version=1.10.4
+          EOF
+          
+          # Create project/plugins.sbt (with plugins for dist and jacoco)
+          cat > test-project/project/plugins.sbt << 'EOF'
+          // Plugin for 'dist' command
+          addSbtPlugin("com.github.sbt" % "sbt-native-packager" % "1.9.16")
+          
+          // Plugin for 'jacocoAggregate' command
+          addSbtPlugin("com.github.sbt" % "sbt-jacoco" % "3.4.0")
+          EOF
+          
           # Create build.sbt
           cat > test-project/build.sbt << 'EOF'
-          scalaVersion := "3.3.1"
-          
           name := "test-project"
           version := "0.1.0"
+          scalaVersion := "3.3.1"
+          
+          // Enable JavaAppPackaging for 'dist' command
+          enablePlugins(JavaAppPackaging)
           
           libraryDependencies ++= Seq(
             "org.scala-lang.modules" %% "scala-parser-combinators" % "2.3.0"
           )
-          EOF
           
-          # Create project/build.properties
-          echo 'sbt.version=1.10.4' > test-project/project/build.properties
+          // Jacoco settings
+          jacocoReportSettings := JacocoReportSettings(
+            "Jacoco Coverage Report",
+            None,
+            JacocoThresholds(),
+            Seq(JacocoReportFormats.ScalaHTML, JacocoReportFormats.XML),
+            "utf-8"
+          )
+          EOF
           
           # Create a simple Scala file
           cat > test-project/src/main/scala/Hello.scala << 'EOF'
@@ -56,10 +78,14 @@ jobs:
             def main(args: Array[String]): Unit = {
               println("Hello from test!")
             }
+            
+            def greet(name: String): String = {
+              s"Hello, $name!"
+            }
           }
           EOF
           
-          echo "✓ Test project created"
+          echo "✓ Test project created with plugins (sbt-native-packager, sbt-jacoco)"
       
       # ========================================
       # Test Action: Build and Test
@@ -76,13 +102,13 @@ jobs:
           enable-cache: true
           
           # Build params
-          sbt-commands: 'clean compile'
+          sbt-commands: 'clean compile jacocoAggregate dist'
           working-directory: './test-project'
           
-          # Artifact params
+          # Artifact params (Upload .zip like production)
           upload-artifacts: true
           artifact-name-prefix: 'test-public'
-          artifact-path: './test-project/target/**/*.jar'
+          #artifact-path: './test-project/target/universal/*.zip'
           artifact-retention-days: 1
           artifact-if-no-files-found: 'warn'
       
@@ -151,6 +177,27 @@ jobs:
             ls -la target/scala-3.3.1/classes/ | head -10
           else
             echo "❌ ERROR: Compiled classes not found"
+            exit 1
+          fi
+          
+          echo ""
+          
+          # Check if Jacoco reports exist
+          if [ -d "target/scala-3.3.1/jacoco" ]; then
+            echo "✅ Jacoco reports found"
+            ls -la target/scala-3.3.1/jacoco/
+          else
+            echo "⚠️  WARNING: Jacoco reports not found (may not have tests)"
+          fi
+          
+          echo ""
+          
+          # Check if dist artifact (ZIP) exists
+          if ls target/universal/*.zip 1> /dev/null 2>&1; then
+            echo "✅ Dist artifact found"
+            ls -lh target/universal/*.zip
+          else
+            echo "❌ ERROR: Dist artifact (ZIP) not found"
             exit 1
           fi
           

@@ -3,15 +3,8 @@ name: Test Build and Test SBT - Public
 on:
   push:
     branches: [main, develop]
-    paths:
-      - '.github/actions/build-and-test-sbt/**'
-      - '.github/actions/setup-sbt/**'
-      - '.github/workflows/test-build-and-test-public.yml'
   pull_request:
     branches: [main]
-    paths:
-      - '.github/actions/build-and-test-sbt/**'
-      - '.github/actions/setup-sbt/**'
   workflow_dispatch:
 
 jobs:

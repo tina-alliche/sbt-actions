@@ -185,7 +185,20 @@ jobs:
           echo "========================================="
           echo "✅ Setup Verification Complete"
           echo "========================================="
-      
+
+      - name: Dump Custom Environment Variables
+        if: always()
+        run: |
+          echo "========================================="
+          echo "Dumping Custom Environment Variables"
+          echo "========================================="
+
+          env | sort | grep -E '^(TZ|TEST_ENV|ARTIFACTORY_|JAVA_|SBT_)'
+
+          echo ""
+          echo "========================================="
+
+
       # ========================================
       # Verify Action Structure
       # ========================================

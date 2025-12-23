@@ -99,7 +99,7 @@ jobs:
             def process(data: String): String = {
               s"Processed: $data"
             }
-            
+          
             def validate(input: Int): Boolean = {
               input > 0 && input < 100
             }
@@ -113,19 +113,19 @@ jobs:
           
           class EnterpriseServiceSpec extends AnyFlatSpec with Matchers {
             val service = new EnterpriseService()
-            
+          
             "EnterpriseService" should "process data correctly" in {
               service.process("test") shouldBe "Processed: test"
             }
-            
+          
             it should "validate positive numbers" in {
               service.validate(50) shouldBe true
             }
-            
+          
             it should "reject negative numbers" in {
               service.validate(-1) shouldBe false
             }
-            
+          
             it should "reject numbers >= 100" in {
               service.validate(100) shouldBe false
             }
@@ -143,8 +143,8 @@ jobs:
         with:
           component-name: 'test-enterprise'
           build-version: '1.0.0-enterprise-test'
-          artifactory-host: 'artifacts.example.com'  # Generic enterprise Artifactory
-          repositories-file: 'custom-enterprise'     # Custom repositories file
+          artifactory-host: 'artifacts.example.com'
+          repositories-file: 'custom-enterprise'
           working-directory: './test-project-enterprise'
           multi-module: false
           enable-jacoco: true
@@ -154,17 +154,17 @@ jobs:
           env-vars: |
             TZ: America/New_York
             ENTERPRISE_MODE: true
-      
+
       # ========================================
-      # Verify Reports
+      # Verify Reports (IDENTICAL TO MONO/MULTI)
       # ========================================
       - name: Verify Jacoco Reports Exist
         run: |
           echo "========================================="
-          echo "Verifying Enterprise Jacoco Reports"
+          echo "Verifying Jacoco Reports"
           echo "========================================="
           
-          # Construct full path
+          # Construct full path (working-directory + report path)
           JACOCO_XML_FULL="test-project-enterprise/${{ steps.analysis.outputs.jacoco-report-path }}"
           JACOCO_HTML_FULL="test-project-enterprise/${{ steps.analysis.outputs.jacoco-html-path }}"
           
@@ -174,6 +174,7 @@ jobs:
             ls -lh "$JACOCO_XML_FULL"
           else
             echo "❌ ERROR: Jacoco XML not found at: $JACOCO_XML_FULL"
+            echo "Output was: ${{ steps.analysis.outputs.jacoco-report-path }}"
             exit 1
           fi
           
@@ -182,16 +183,16 @@ jobs:
             echo "✅ Jacoco HTML found: $JACOCO_HTML_FULL"
             ls -la "$JACOCO_HTML_FULL"
           else
-            echo "⚠️  WARNING: Jacoco HTML not found"
+            echo "⚠️  WARNING: Jacoco HTML not found at: $JACOCO_HTML_FULL"
           fi
           
           echo ""
           echo "========================================="
           echo "✅ Reports Verified"
           echo "========================================="
-      
+
       # ========================================
-      # Verify Coverage
+      # Verify Coverage (IDENTICAL TO MONO-MODULE)
       # ========================================
       - name: Verify Coverage Percentage
         run: |
@@ -207,22 +208,15 @@ jobs:
           COVERAGE="${{ steps.analysis.outputs.coverage-percentage }}"
           if [[ "$COVERAGE" =~ ^[0-9]+\.?[0-9]*$ ]]; then
             echo "✅ Coverage is numeric: $COVERAGE%"
-            
-            # Verify reasonable coverage (should be > 0 for this test)
-            if (( $(echo "$COVERAGE > 0" | bc -l) )); then
-              echo "✅ Coverage is greater than 0%"
-            else
-              echo "⚠️  WARNING: Coverage is 0%"
-            fi
           else
             echo "❌ ERROR: Coverage is not numeric: $COVERAGE"
             exit 1
           fi
-      
+
       # ========================================
-      # Verify Enterprise Features
+      # Verify Enterprise Features (SPECIFIC TO ENTERPRISE)
       # ========================================
-      - name: Verify Enterprise Features Used
+      - name: Verify Enterprise Features
         run: |
           echo "========================================="
           echo "Verifying Enterprise Features"
@@ -253,16 +247,16 @@ jobs:
           echo "========================================="
           echo "✅ Enterprise Features Verified"
           echo "========================================="
-      
+
       # ========================================
-      # Download and Verify Artifact
+      # Download and Verify Artifact (IDENTICAL TO MONO/MULTI)
       # ========================================
       - name: Download Reports Artifact
         uses: actions/download-artifact@v4
         with:
           name: ${{ steps.analysis.outputs.reports-artifact-name }}
           path: ./downloaded-reports
-      
+
       - name: Verify Downloaded Reports
         run: |
           echo "========================================="

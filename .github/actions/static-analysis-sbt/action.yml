@@ -10,22 +10,22 @@ inputs:
     description: 'Version SBT à installer'
     required: false
     default: '1.10.4'
-  
+
   scala-version:
     description: 'Version Scala (optionnel, pour info)'
     required: false
     default: ''
-  
+
   java-version:
     description: 'Version Java à utiliser'
     required: false
     default: '21'
-  
+
   artifactory-host:
     description: 'Hostname Artifactory (ex: artifacts.exemple.com)'
     required: false
     default: ''
-  
+
   repositories-file:
     description: 'Preset repositories ou chemin vers fichier custom'
     required: false
@@ -292,17 +292,21 @@ runs:
         
         # Find Jacoco XML report
         echo "Searching for Jacoco XML..."
+        echo "DEBUG: Search order: aggregate -> report -> fallback"
         
         # For multi-module projects, try aggregate report first
+        echo "DEBUG: Step 1 - Searching for */jacoco/report/aggregate/jacoco.xml"
         JACOCO_XML=$(find . -path "*/jacoco/report/aggregate/jacoco.xml" -type f 2>/dev/null | head -1)
         
         if [ -z "$JACOCO_XML" ]; then
           # Try standard report location (mono-module or multi-module root)
+          echo "DEBUG: Step 2 - Searching for */jacoco/report/jacoco.xml"
           JACOCO_XML=$(find . -path "*/jacoco/report/jacoco.xml" -type f 2>/dev/null | head -1)
         fi
         
         if [ -z "$JACOCO_XML" ]; then
           # Fallback: try without /report/ (older versions)
+          echo "DEBUG: Step 3 - Searching for */jacoco/jacoco.xml"
           JACOCO_XML=$(find . -path "*/jacoco/jacoco.xml" -type f 2>/dev/null | head -1)
         fi
         
@@ -333,7 +337,7 @@ runs:
           fi
           echo "jacoco-xml-path=" >> $GITHUB_OUTPUT
         fi
-    
+
     # ========================================
     # Extract Coverage Percentage
     # ========================================
@@ -379,7 +383,7 @@ runs:
           echo "coverage=not-found" >> $GITHUB_OUTPUT
           echo "⚠️  Jacoco XML file not found"
         fi
-    
+
     # ========================================
     # Generate Artifact Name
     # ========================================
@@ -398,7 +402,7 @@ runs:
         
         echo "artifact-name=$ARTIFACT_NAME" >> $GITHUB_OUTPUT
         echo "Generated artifact name: $ARTIFACT_NAME"
-    
+
     # ========================================
     # Upload Jacoco Reports
     # ========================================
@@ -412,7 +416,7 @@ runs:
           ${{ inputs.working-directory }}/**/target/**/jacoco/
         retention-days: ${{ inputs.reports-retention-days }}
         if-no-files-found: warn
-    
+
     # ========================================
     # Set Analysis Status
     # ========================================
@@ -428,7 +432,7 @@ runs:
           echo "status=failure" >> $GITHUB_OUTPUT
           echo "❌ Analysis failed"
         fi
-    
+
     # ========================================
     # Display Summary
     # ========================================

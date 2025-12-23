@@ -3,13 +3,7 @@ name: Test Static Analysis SBT - Public
 on:
   push:
     branches: [main, develop]
-    paths:
-      - '.github/actions/static-analysis-sbt/**'
-      - '.github/workflows/test-static-analysis-public.yml'
   pull_request:
-    paths:
-      - '.github/actions/static-analysis-sbt/**'
-      - '.github/workflows/test-static-analysis-public.yml'
   workflow_dispatch:
 
 jobs:

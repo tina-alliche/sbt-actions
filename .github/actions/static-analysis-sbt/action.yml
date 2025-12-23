@@ -133,16 +133,16 @@ outputs:
   reports-artifact-name:
     description: 'Nom de l\''artifact contenant les rapports'
     value: ${{ steps.upload-reports.outputs.artifact-name }}
-  
+
   analysis-status:
     description: 'Statut de l''analyse (success/failure)'
     value: ${{ steps.set-status.outputs.status }}
-  
+
   # Setup SBT outputs (pass-through)
   sbt-version:
     description: 'Version SBT installée'
     value: ${{ steps.setup-sbt.outputs.sbt-version }}
-  
+
   cache-hit:
     description: 'Cache hit (true/false)'
     value: ${{ steps.setup-sbt.outputs.cache-hit }}
@@ -166,7 +166,7 @@ runs:
         enable-cache: ${{ inputs.enable-cache }}
         cache-key-prefix: ${{ inputs.cache-key-prefix }}
         working-directory: ${{ inputs.working-directory }}
-    
+
     # ========================================
     # Parse Environment Variables
     # ========================================
@@ -187,7 +187,7 @@ runs:
             echo "$key=$value" >> $GITHUB_ENV
           fi
         done
-    
+
     # ========================================
     # Display Analysis Configuration
     # ========================================
@@ -205,7 +205,7 @@ runs:
         echo "Working Directory: ${{ inputs.working-directory }}"
         echo "SBT Version: ${{ steps.setup-sbt.outputs.sbt-version }}"
         echo "========================================="
-    
+
     # ========================================
     # Run Tests and Generate Jacoco Reports
     # ========================================
@@ -256,7 +256,7 @@ runs:
           echo "❌ Failed to generate Jacoco reports"
           exit 1
         fi
-    
+
     # ========================================
     # Find Jacoco Reports
     # ========================================
@@ -269,9 +269,36 @@ runs:
         echo "========================================="
         echo "Locating Jacoco Reports"
         echo "========================================="
+        echo "Current directory: $(pwd)"
+        echo ""
+        
+        # Debug: Show directory structure
+        echo "Directory structure:"
+        ls -la
+        echo ""
+        
+        # Debug: Show target directory if exists
+        if [ -d "target" ]; then
+          echo "Target directory exists:"
+          find target -type d -name "jacoco" 2>/dev/null || echo "No jacoco directories found in target"
+          echo ""
+          echo "Looking for jacoco.xml files:"
+          find target -name "jacoco.xml" -type f 2>/dev/null || echo "No jacoco.xml files found"
+          echo ""
+        else
+          echo "⚠️  WARNING: No target directory found!"
+          echo ""
+        fi
         
         # Find Jacoco XML report
-        JACOCO_XML=$(find . -path "*/jacoco/jacoco.xml" -type f | head -1)
+        echo "Searching for Jacoco XML..."
+        # Try both patterns: with and without /report/ subdirectory
+        JACOCO_XML=$(find . -path "*/jacoco/report/jacoco.xml" -type f 2>/dev/null | head -1)
+        
+        if [ -z "$JACOCO_XML" ]; then
+          # Fallback: try without /report/
+          JACOCO_XML=$(find . -path "*/jacoco/jacoco.xml" -type f 2>/dev/null | head -1)
+        fi
         
         if [ -n "$JACOCO_XML" ]; then
           echo "✅ Found Jacoco XML: $JACOCO_XML"
@@ -289,7 +316,15 @@ runs:
           echo "Jacoco reports location:"
           ls -la "$(dirname "$JACOCO_XML")"
         else
-          echo "⚠️  WARNING: Jacoco XML report not found"
+          echo "❌ ERROR: Jacoco XML report not found"
+          echo ""
+          echo "Debug: All XML files in current directory:"
+          find . -name "*.xml" -type f 2>/dev/null | head -20 || echo "No XML files found"
+          echo ""
+          echo "Debug: All files under target (if exists):"
+          if [ -d "target" ]; then
+            find target -type f 2>/dev/null | head -30 || echo "No files found in target"
+          fi
           echo "jacoco-xml-path=" >> $GITHUB_OUTPUT
         fi
     

@@ -302,24 +302,24 @@ runs:
         done
         
         # Strategy for multi-module:
-        # 1. Check submodules (api/core/etc) - they have the real aggregate reports
-        # 2. Check root target - may have empty file for multi-module
-        # 3. Fallback patterns
+        # 1. Check submodules (api/core/etc) - exclude ./target
+        # 2. Check root target - for mono-module
+        # 3. Fallback
         
         # Step 1: Look in submodule targets (exclude root ./target)
         echo "DEBUG: Step 1 - Looking in submodule directories"
-        JACOCO_XML=$(find . -path "*/target/*/jacoco/report/jacoco.xml" -type f 2>/dev/null | grep -v "^\./target/" | head -1)
+        JACOCO_XML=$(find . -path "*/target/*/jacoco/report/jacoco.xml" -type f 2>/dev/null | grep -v "^\./target/" | head -1 || true)
         
         if [ -z "$JACOCO_XML" ]; then
-          # Step 2: Try root target/jacoco/report/jacoco.xml
-          echo "DEBUG: Step 2 - Looking in root target/jacoco/report/jacoco.xml"
-          JACOCO_XML=$(find ./target -path "*/jacoco/report/jacoco.xml" -type f 2>/dev/null | head -1)
+          # Step 2: Try root target (for mono-module)
+          echo "DEBUG: Step 2 - Looking in root target directory"
+          JACOCO_XML=$(find . -path "./target/*/jacoco/report/jacoco.xml" -type f 2>/dev/null | head -1 || true)
         fi
         
         if [ -z "$JACOCO_XML" ]; then
           # Step 3: Fallback - any jacoco.xml
           echo "DEBUG: Step 3 - Fallback to any jacoco.xml"
-          JACOCO_XML=$(find . -name "jacoco.xml" -type f 2>/dev/null | head -1)
+          JACOCO_XML=$(find . -name "jacoco.xml" -type f 2>/dev/null | head -1 || true)
         fi
         
         if [ -n "$JACOCO_XML" ]; then

@@ -292,38 +292,34 @@ runs:
         
         # Find Jacoco XML report
         echo "Searching for Jacoco XML..."
-        echo "DEBUG: Search order: aggregate -> report -> fallback"
+        echo "DEBUG: Strategy - check submodules first, then root"
         
-        # Debug: Check if aggregate directory exists and what's in it
-        if [ -d "target" ]; then
-          echo "DEBUG: Checking for aggregate directories..."
-          AGGREGATE_DIRS=$(find target -type d -name "aggregate" 2>/dev/null)
-          if [ -n "$AGGREGATE_DIRS" ]; then
-            echo "DEBUG: Found aggregate directories:"
-            echo "$AGGREGATE_DIRS"
-            for dir in $AGGREGATE_DIRS; do
-              echo "DEBUG: Contents of $dir:"
-              ls -la "$dir" 2>/dev/null || echo "  (cannot list)"
-            done
-          else
-            echo "DEBUG: No aggregate directories found"
-          fi
-        fi
+        # List all jacoco.xml files for debugging
+        echo "DEBUG: All jacoco.xml files found:"
+        find . -name "jacoco.xml" -type f 2>/dev/null | while read -r file; do
+          size=$(stat -f%z "$file" 2>/dev/null || stat -c%s "$file" 2>/dev/null || echo "?")
+          echo "DEBUG:   $file ($size bytes)"
+        done
         
-        # For multi-module projects, try aggregate report first
-        echo "DEBUG: Step 1 - Searching for */jacoco/report/aggregate/jacoco.xml"
-        JACOCO_XML=$(find . -path "*/jacoco/report/aggregate/jacoco.xml" -type f 2>/dev/null | head -1)
+        # Strategy for multi-module:
+        # 1. Check submodules (api/core/etc) - they have the real aggregate reports
+        # 2. Check root target - may have empty file for multi-module
+        # 3. Fallback patterns
+        
+        # Step 1: Look in submodule targets (exclude root ./target)
+        echo "DEBUG: Step 1 - Looking in submodule directories"
+        JACOCO_XML=$(find . -path "*/target/*/jacoco/report/jacoco.xml" -type f 2>/dev/null | grep -v "^\./target/" | head -1)
         
         if [ -z "$JACOCO_XML" ]; then
-          # Try standard report location (mono-module or multi-module root)
-          echo "DEBUG: Step 2 - Searching for */jacoco/report/jacoco.xml"
-          JACOCO_XML=$(find . -path "*/jacoco/report/jacoco.xml" -type f 2>/dev/null | head -1)
+          # Step 2: Try root target/jacoco/report/jacoco.xml
+          echo "DEBUG: Step 2 - Looking in root target/jacoco/report/jacoco.xml"
+          JACOCO_XML=$(find ./target -path "*/jacoco/report/jacoco.xml" -type f 2>/dev/null | head -1)
         fi
         
         if [ -z "$JACOCO_XML" ]; then
-          # Fallback: try without /report/ (older versions)
-          echo "DEBUG: Step 3 - Searching for */jacoco/jacoco.xml"
-          JACOCO_XML=$(find . -path "*/jacoco/jacoco.xml" -type f 2>/dev/null | head -1)
+          # Step 3: Fallback - any jacoco.xml
+          echo "DEBUG: Step 3 - Fallback to any jacoco.xml"
+          JACOCO_XML=$(find . -name "jacoco.xml" -type f 2>/dev/null | head -1)
         fi
         
         if [ -n "$JACOCO_XML" ]; then

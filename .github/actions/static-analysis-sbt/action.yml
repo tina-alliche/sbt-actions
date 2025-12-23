@@ -1,0 +1,427 @@
+name: 'Static Analysis SBT'
+description: 'Analyse statique pour projets SBT : Coverage Jacoco, Dependency Check, SonarQube'
+author: 'Tina Alliche'
+
+inputs:
+  # ========================================
+  # Setup SBT Configuration (pass-through)
+  # ========================================
+  sbt-version:
+    description: 'Version SBT à installer'
+    required: false
+    default: '1.10.4'
+  
+  scala-version:
+    description: 'Version Scala (optionnel, pour info)'
+    required: false
+    default: ''
+  
+  java-version:
+    description: 'Version Java à utiliser'
+    required: false
+    default: '21'
+  
+  artifactory-host:
+    description: 'Hostname Artifactory (ex: artifacts.exemple.com)'
+    required: false
+    default: ''
+  
+  repositories-file:
+    description: 'Preset repositories ou chemin vers fichier custom'
+    required: false
+    default: ''
+
+  repositories-content:
+    description: 'Contenu inline du fichier repositories (alternative à repositories-file)'
+    required: false
+    default: ''
+
+  enable-cache:
+    description: 'Activer le cache pour ivy2, sbt, coursier'
+    required: false
+    default: 'true'
+
+  cache-key-prefix:
+    description: 'Préfixe pour les clés de cache'
+    required: false
+    default: 'sbt'
+
+  working-directory:
+    description: 'Répertoire de travail pour les commandes SBT'
+    required: false
+    default: '.'
+
+  # ========================================
+  # Analysis Configuration
+  # ========================================
+  multi-module:
+    description: 'Projet multi-module (utilise jacocoAggregate au lieu de jacoco)'
+    required: false
+    default: 'false'
+
+  component-name:
+    description: 'Nom du composant (pour nommage des rapports)'
+    required: true
+
+  build-version:
+    description: 'Version du build (pour nommage des rapports)'
+    required: true
+
+  # ========================================
+  # Jacoco Configuration
+  # ========================================
+  enable-jacoco:
+    description: 'Activer la génération des rapports Jacoco'
+    required: false
+    default: 'true'
+
+  jacoco-command:
+    description: 'Commande Jacoco custom (override auto-détection mono/multi-module)'
+    required: false
+    default: ''
+
+  skip-tests:
+    description: 'Skip les tests (utilise les rapports existants)'
+    required: false
+    default: 'false'
+
+  # ========================================
+  # Reports Upload
+  # ========================================
+  upload-reports:
+    description: 'Upload les rapports vers GitHub Artifacts'
+    required: false
+    default: 'true'
+
+  reports-artifact-name:
+    description: 'Nom de l\''artifact pour les rapports (auto-généré si vide)'
+    required: false
+    default: ''
+
+  reports-retention-days:
+    description: 'Durée de rétention des rapports (jours)'
+    required: false
+    default: '1'
+
+  # ========================================
+  # Environment Variables
+  # ========================================
+  env-vars:
+    description: 'Variables d''environnement additionnelles (format YAML)'
+    required: false
+    default: ''
+
+  sbt-opts:
+    description: 'Options SBT (SBT_OPTS)'
+    required: false
+    default: '-Dsbt.override.build.repos=true -Dsbt.log.noformat=true'
+
+outputs:
+  # Analysis outputs
+  jacoco-report-path:
+    description: 'Chemin du rapport Jacoco XML'
+    value: ${{ steps.find-reports.outputs.jacoco-xml-path }}
+
+  jacoco-html-path:
+    description: 'Chemin du rapport Jacoco HTML'
+    value: ${{ steps.find-reports.outputs.jacoco-html-path }}
+
+  coverage-percentage:
+    description: 'Pourcentage de couverture total'
+    value: ${{ steps.extract-coverage.outputs.coverage }}
+
+  reports-artifact-name:
+    description: 'Nom de l\''artifact contenant les rapports'
+    value: ${{ steps.upload-reports.outputs.artifact-name }}
+  
+  analysis-status:
+    description: 'Statut de l''analyse (success/failure)'
+    value: ${{ steps.set-status.outputs.status }}
+  
+  # Setup SBT outputs (pass-through)
+  sbt-version:
+    description: 'Version SBT installée'
+    value: ${{ steps.setup-sbt.outputs.sbt-version }}
+  
+  cache-hit:
+    description: 'Cache hit (true/false)'
+    value: ${{ steps.setup-sbt.outputs.cache-hit }}
+
+runs:
+  using: 'composite'
+  steps:
+    # ========================================
+    # Setup SBT (Appelle l'action existante)
+    # ========================================
+    - name: Setup SBT Environment
+      id: setup-sbt
+      uses: ./.github/actions/setup-sbt
+      with:
+        sbt-version: ${{ inputs.sbt-version }}
+        scala-version: ${{ inputs.scala-version }}
+        java-version: ${{ inputs.java-version }}
+        artifactory-host: ${{ inputs.artifactory-host }}
+        repositories-file: ${{ inputs.repositories-file }}
+        repositories-content: ${{ inputs.repositories-content }}
+        enable-cache: ${{ inputs.enable-cache }}
+        cache-key-prefix: ${{ inputs.cache-key-prefix }}
+        working-directory: ${{ inputs.working-directory }}
+    
+    # ========================================
+    # Parse Environment Variables
+    # ========================================
+    - name: Parse and Export Environment Variables
+      if: inputs.env-vars != ''
+      shell: bash
+      run: |
+        echo "Parsing environment variables from YAML..."
+        
+        # Parse YAML format and export as env vars
+        echo "${{ inputs.env-vars }}" | while IFS=: read -r key value; do
+          # Trim whitespace
+          key=$(echo "$key" | xargs)
+          value=$(echo "$value" | xargs)
+        
+          if [ -n "$key" ] && [ -n "$value" ]; then
+            echo "Exporting $key=$value"
+            echo "$key=$value" >> $GITHUB_ENV
+          fi
+        done
+    
+    # ========================================
+    # Display Analysis Configuration
+    # ========================================
+    - name: Display Analysis Configuration
+      shell: bash
+      run: |
+        echo "========================================="
+        echo "Static Analysis Configuration"
+        echo "========================================="
+        echo "Component: ${{ inputs.component-name }}"
+        echo "Version: ${{ inputs.build-version }}"
+        echo "Multi-module: ${{ inputs.multi-module }}"
+        echo "Enable Jacoco: ${{ inputs.enable-jacoco }}"
+        echo "Skip Tests: ${{ inputs.skip-tests }}"
+        echo "Working Directory: ${{ inputs.working-directory }}"
+        echo "SBT Version: ${{ steps.setup-sbt.outputs.sbt-version }}"
+        echo "========================================="
+    
+    # ========================================
+    # Run Tests and Generate Jacoco Reports
+    # ========================================
+    - name: Generate Jacoco Coverage Reports
+      id: jacoco
+      if: inputs.enable-jacoco == 'true'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        SBT_OPTS: ${{ inputs.sbt-opts }}
+      run: |
+        echo "========================================="
+        echo "Generating Jacoco Coverage Reports"
+        echo "========================================="
+        
+        # Determine Jacoco command
+        if [ -n "${{ inputs.jacoco-command }}" ]; then
+          JACOCO_CMD="${{ inputs.jacoco-command }}"
+          echo "Using custom Jacoco command: $JACOCO_CMD"
+        elif [ "${{ inputs.multi-module }}" == "true" ]; then
+          if [ "${{ inputs.skip-tests }}" == "true" ]; then
+            JACOCO_CMD="jacocoAggregate"
+          else
+            JACOCO_CMD="clean test jacocoAggregate"
+          fi
+          echo "Multi-module project detected, using: $JACOCO_CMD"
+        else
+          if [ "${{ inputs.skip-tests }}" == "true" ]; then
+            JACOCO_CMD="jacoco"
+          else
+            JACOCO_CMD="clean test jacoco"
+          fi
+          echo "Single-module project detected, using: $JACOCO_CMD"
+        fi
+        
+        echo ""
+        echo "Running: sbt $JACOCO_CMD"
+        echo ""
+        
+        # Run SBT command
+        if sbt $JACOCO_CMD; then
+          echo "status=success" >> $GITHUB_OUTPUT
+          echo ""
+          echo "✅ Jacoco reports generated successfully"
+        else
+          echo "status=failure" >> $GITHUB_OUTPUT
+          echo ""
+          echo "❌ Failed to generate Jacoco reports"
+          exit 1
+        fi
+    
+    # ========================================
+    # Find Jacoco Reports
+    # ========================================
+    - name: Find Jacoco Reports
+      id: find-reports
+      if: inputs.enable-jacoco == 'true'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        echo "========================================="
+        echo "Locating Jacoco Reports"
+        echo "========================================="
+        
+        # Find Jacoco XML report
+        JACOCO_XML=$(find . -path "*/jacoco/jacoco.xml" -type f | head -1)
+        
+        if [ -n "$JACOCO_XML" ]; then
+          echo "✅ Found Jacoco XML: $JACOCO_XML"
+          echo "jacoco-xml-path=$JACOCO_XML" >> $GITHUB_OUTPUT
+        
+          # Find HTML report directory
+          JACOCO_HTML_DIR=$(dirname "$JACOCO_XML")/html
+          if [ -d "$JACOCO_HTML_DIR" ]; then
+            echo "✅ Found Jacoco HTML: $JACOCO_HTML_DIR"
+            echo "jacoco-html-path=$JACOCO_HTML_DIR" >> $GITHUB_OUTPUT
+          fi
+        
+          # Display report location
+          echo ""
+          echo "Jacoco reports location:"
+          ls -la "$(dirname "$JACOCO_XML")"
+        else
+          echo "⚠️  WARNING: Jacoco XML report not found"
+          echo "jacoco-xml-path=" >> $GITHUB_OUTPUT
+        fi
+    
+    # ========================================
+    # Extract Coverage Percentage
+    # ========================================
+    - name: Extract Coverage Percentage
+      id: extract-coverage
+      if: inputs.enable-jacoco == 'true' && steps.find-reports.outputs.jacoco-xml-path != ''
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        echo "========================================="
+        echo "Extracting Coverage Metrics"
+        echo "========================================="
+        
+        JACOCO_XML="${{ steps.find-reports.outputs.jacoco-xml-path }}"
+        
+        if [ -f "$JACOCO_XML" ]; then
+          # Extract coverage from XML using grep and basic parsing
+          # Format: <counter type="LINE" missed="X" covered="Y"/>
+        
+          COVERED=$(grep -oP 'type="LINE".*?covered="\K[0-9]+' "$JACOCO_XML" | head -1)
+          MISSED=$(grep -oP 'type="LINE".*?missed="\K[0-9]+' "$JACOCO_XML" | head -1)
+        
+          if [ -n "$COVERED" ] && [ -n "$MISSED" ]; then
+            TOTAL=$((COVERED + MISSED))
+        
+            if [ $TOTAL -gt 0 ]; then
+              COVERAGE=$(awk "BEGIN {printf \"%.2f\", ($COVERED / $TOTAL) * 100}")
+              echo "coverage=$COVERAGE" >> $GITHUB_OUTPUT
+        
+              echo "✅ Coverage: $COVERAGE%"
+              echo "   Lines covered: $COVERED"
+              echo "   Lines missed: $MISSED"
+              echo "   Total lines: $TOTAL"
+            else
+              echo "coverage=0" >> $GITHUB_OUTPUT
+              echo "⚠️  No lines to cover (total=0)"
+            fi
+          else
+            echo "coverage=unknown" >> $GITHUB_OUTPUT
+            echo "⚠️  Could not extract coverage metrics"
+          fi
+        else
+          echo "coverage=not-found" >> $GITHUB_OUTPUT
+          echo "⚠️  Jacoco XML file not found"
+        fi
+    
+    # ========================================
+    # Generate Artifact Name
+    # ========================================
+    - name: Generate Reports Artifact Name
+      id: generate-artifact-name
+      if: inputs.upload-reports == 'true'
+      shell: bash
+      run: |
+        if [ -n "${{ inputs.reports-artifact-name }}" ]; then
+          ARTIFACT_NAME="${{ inputs.reports-artifact-name }}"
+        else
+          # Generate name: {component}-{version}-reports-{random}
+          RANDOM_SUFFIX=$(head -c 100 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 10)
+          ARTIFACT_NAME="${{ inputs.component-name }}-${{ inputs.build-version }}-reports-${RANDOM_SUFFIX}"
+        fi
+        
+        echo "artifact-name=$ARTIFACT_NAME" >> $GITHUB_OUTPUT
+        echo "Generated artifact name: $ARTIFACT_NAME"
+    
+    # ========================================
+    # Upload Jacoco Reports
+    # ========================================
+    - name: Upload Jacoco Reports
+      id: upload-reports
+      if: inputs.upload-reports == 'true' && inputs.enable-jacoco == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ steps.generate-artifact-name.outputs.artifact-name }}
+        path: |
+          ${{ inputs.working-directory }}/**/target/**/jacoco/
+        retention-days: ${{ inputs.reports-retention-days }}
+        if-no-files-found: warn
+    
+    # ========================================
+    # Set Analysis Status
+    # ========================================
+    - name: Set Analysis Status
+      id: set-status
+      if: always()
+      shell: bash
+      run: |
+        if [ "${{ steps.jacoco.outputs.status }}" == "success" ]; then
+          echo "status=success" >> $GITHUB_OUTPUT
+          echo "✅ Analysis completed successfully"
+        else
+          echo "status=failure" >> $GITHUB_OUTPUT
+          echo "❌ Analysis failed"
+        fi
+    
+    # ========================================
+    # Display Summary
+    # ========================================
+    - name: Display Analysis Summary
+      if: always()
+      shell: bash
+      run: |
+        echo ""
+        echo "========================================="
+        echo "Static Analysis Summary"
+        echo "========================================="
+        echo "Component: ${{ inputs.component-name }}"
+        echo "Version: ${{ inputs.build-version }}"
+        echo "Analysis Status: ${{ steps.set-status.outputs.status }}"
+        
+        if [ "${{ inputs.enable-jacoco }}" == "true" ]; then
+          echo ""
+          echo "Jacoco Coverage:"
+          echo "  Coverage: ${{ steps.extract-coverage.outputs.coverage }}%"
+          echo "  XML Report: ${{ steps.find-reports.outputs.jacoco-xml-path }}"
+          echo "  HTML Report: ${{ steps.find-reports.outputs.jacoco-html-path }}"
+        fi
+        
+        if [ "${{ inputs.upload-reports }}" == "true" ]; then
+          echo ""
+          echo "Reports Artifact: ${{ steps.generate-artifact-name.outputs.artifact-name }}"
+        fi
+        
+        echo "========================================="
+        
+        if [ "${{ steps.set-status.outputs.status }}" == "success" ]; then
+          echo "✅✅✅ Static Analysis Completed Successfully ✅✅✅"
+        else
+          echo "❌❌❌ Static Analysis Failed ❌❌❌"
+        fi
+        
+        echo "========================================="

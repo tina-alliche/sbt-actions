@@ -1,0 +1,509 @@
+name: Test Static Analysis SBT - Public
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  # ========================================
+  # Test Mono-Module
+  # ========================================
+  test-mono-module:
+    name: Test Mono-Module with Jacoco
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ========================================
+      # Create Test Project (Mono-Module)
+      # ========================================
+      - name: Create Test Project
+        run: |
+          echo "=== Creating Mono-Module Test Project ==="
+          mkdir -p test-project-mono/project
+          mkdir -p test-project-mono/src/main/scala
+          mkdir -p test-project-mono/src/test/scala
+          
+          # project/build.properties
+          cat > test-project-mono/project/build.properties << 'EOF'
+          sbt.version=1.10.4
+          EOF
+          
+          # project/plugins.sbt (with jacoco)
+          cat > test-project-mono/project/plugins.sbt << 'EOF'
+          addSbtPlugin("com.github.sbt" % "sbt-jacoco" % "3.4.0")
+          EOF
+          
+          # build.sbt
+          cat > test-project-mono/build.sbt << 'EOF'
+          name := "test-mono-module"
+          version := "1.0.0"
+          scalaVersion := "3.3.1"
+          
+          libraryDependencies ++= Seq(
+            "org.scala-lang.modules" %% "scala-parser-combinators" % "2.3.0",
+            "org.scalatest" %% "scalatest" % "3.2.15" % Test
+          )
+          
+          // Jacoco settings
+          jacocoReportSettings := JacocoReportSettings(
+            "Jacoco Coverage Report",
+            None,
+            JacocoThresholds(),
+            Seq(JacocoReportFormats.ScalaHTML, JacocoReportFormats.XML),
+            "utf-8"
+          )
+          EOF
+          
+          # Main code
+          cat > test-project-mono/src/main/scala/Calculator.scala << 'EOF'
+          class Calculator {
+            def add(a: Int, b: Int): Int = a + b
+            def subtract(a: Int, b: Int): Int = a - b
+            def multiply(a: Int, b: Int): Int = a * b
+            def divide(a: Int, b: Int): Int = {
+              require(b != 0, "Cannot divide by zero")
+              a / b
+            }
+          }
+          
+          object Calculator {
+            def main(args: Array[String]): Unit = {
+              val calc = new Calculator()
+              println(s"2 + 3 = ${calc.add(2, 3)}")
+              println(s"5 - 2 = ${calc.subtract(5, 2)}")
+            }
+          }
+          EOF
+          
+          # Test code
+          cat > test-project-mono/src/test/scala/CalculatorSpec.scala << 'EOF'
+          import org.scalatest.flatspec.AnyFlatSpec
+          import org.scalatest.matchers.should.Matchers
+          
+          class CalculatorSpec extends AnyFlatSpec with Matchers {
+            val calculator = new Calculator()
+          
+            "Calculator" should "add two numbers correctly" in {
+              calculator.add(2, 3) shouldBe 5
+            }
+          
+            it should "subtract two numbers correctly" in {
+              calculator.subtract(5, 2) shouldBe 3
+            }
+          
+            it should "multiply two numbers correctly" in {
+              calculator.multiply(3, 4) shouldBe 12
+            }
+          
+            it should "divide two numbers correctly" in {
+              calculator.divide(10, 2) shouldBe 5
+            }
+          
+            it should "throw exception when dividing by zero" in {
+              assertThrows[IllegalArgumentException] {
+                calculator.divide(10, 0)
+              }
+            }
+          }
+          EOF
+          
+          echo "✓ Mono-module test project created"
+
+      # ========================================
+      # Run Static Analysis (PUBLIC - Maven Central)
+      # ========================================
+      - name: Run Static Analysis (Mono-Module)
+        id: analysis
+        uses: ./.github/actions/static-analysis-sbt
+        with:
+          component-name: 'test-mono-module'
+          build-version: '1.0.0-test'
+          # PAS d'Artifactory - utilise Maven Central par défaut
+          working-directory: './test-project-mono'
+          multi-module: false
+          enable-jacoco: true
+          skip-tests: false
+          upload-reports: true
+          reports-retention-days: 1
+
+      # ========================================
+      # Verify Reports
+      # ========================================
+      - name: Verify Jacoco Reports Exist
+        run: |
+          echo "========================================="
+          echo "Verifying Jacoco Reports"
+          echo "========================================="
+          
+          cd test-project-mono
+          
+          # Check Jacoco XML
+          if [ -f "${{ steps.analysis.outputs.jacoco-report-path }}" ]; then
+            echo "✅ Jacoco XML found: ${{ steps.analysis.outputs.jacoco-report-path }}"
+            ls -lh "${{ steps.analysis.outputs.jacoco-report-path }}"
+          else
+            echo "❌ ERROR: Jacoco XML not found"
+            exit 1
+          fi
+          
+          # Check Jacoco HTML
+          if [ -d "${{ steps.analysis.outputs.jacoco-html-path }}" ]; then
+            echo "✅ Jacoco HTML found: ${{ steps.analysis.outputs.jacoco-html-path }}"
+            ls -la "${{ steps.analysis.outputs.jacoco-html-path }}"
+          else
+            echo "⚠️  WARNING: Jacoco HTML not found"
+          fi
+          
+          echo ""
+          echo "========================================="
+          echo "✅ Reports Verified"
+          echo "========================================="
+
+      # ========================================
+      # Verify Coverage
+      # ========================================
+      - name: Verify Coverage Percentage
+        run: |
+          echo "========================================="
+          echo "Coverage Metrics"
+          echo "========================================="
+          echo "Coverage: ${{ steps.analysis.outputs.coverage-percentage }}%"
+          echo "Status: ${{ steps.analysis.outputs.analysis-status }}"
+          echo "Artifact: ${{ steps.analysis.outputs.reports-artifact-name }}"
+          echo "========================================="
+          
+          # Verify coverage is numeric
+          COVERAGE="${{ steps.analysis.outputs.coverage-percentage }}"
+          if [[ "$COVERAGE" =~ ^[0-9]+\.?[0-9]*$ ]]; then
+            echo "✅ Coverage is numeric: $COVERAGE%"
+          else
+            echo "❌ ERROR: Coverage is not numeric: $COVERAGE"
+            exit 1
+          fi
+
+      # ========================================
+      # Download and Verify Artifact
+      # ========================================
+      - name: Download Reports Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ steps.analysis.outputs.reports-artifact-name }}
+          path: ./downloaded-reports
+
+      - name: Verify Downloaded Reports
+        run: |
+          echo "========================================="
+          echo "Verifying Downloaded Reports"
+          echo "========================================="
+          
+          ls -la ./downloaded-reports
+          
+          # Check if Jacoco reports are in artifact
+          if find ./downloaded-reports -name "jacoco.xml" -type f | grep -q .; then
+            echo "✅ Jacoco XML found in artifact"
+          else
+            echo "❌ ERROR: Jacoco XML not found in artifact"
+            exit 1
+          fi
+          
+          echo "========================================="
+          echo "✅ Artifact Verified"
+          echo "========================================="
+
+  # ========================================
+  # Test Multi-Module
+  # ========================================
+  test-multi-module:
+    name: Test Multi-Module with Jacoco
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ========================================
+      # Create Test Project (Multi-Module)
+      # ========================================
+      - name: Create Multi-Module Test Project
+        run: |
+          echo "=== Creating Multi-Module Test Project ==="
+          mkdir -p test-project-multi/project
+          mkdir -p test-project-multi/core/src/main/scala
+          mkdir -p test-project-multi/core/src/test/scala
+          mkdir -p test-project-multi/api/src/main/scala
+          mkdir -p test-project-multi/api/src/test/scala
+          
+          # project/build.properties
+          cat > test-project-multi/project/build.properties << 'EOF'
+          sbt.version=1.10.4
+          EOF
+          
+          # project/plugins.sbt
+          cat > test-project-multi/project/plugins.sbt << 'EOF'
+          addSbtPlugin("com.github.sbt" % "sbt-jacoco" % "3.4.0")
+          EOF
+          
+          # Root build.sbt
+          cat > test-project-multi/build.sbt << 'EOF'
+          name := "test-multi-module"
+          version := "1.0.0"
+          scalaVersion := "3.3.1"
+          
+          lazy val commonSettings = Seq(
+            scalaVersion := "3.3.1",
+            libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.15" % Test
+          )
+          
+          lazy val root = (project in file("."))
+            .aggregate(core, api)
+            .settings(
+              name := "test-multi-module",
+              jacocoReportSettings := JacocoReportSettings(
+                "Jacoco Coverage Report",
+                None,
+                JacocoThresholds(),
+                Seq(JacocoReportFormats.ScalaHTML, JacocoReportFormats.XML),
+                "utf-8"
+              )
+            )
+          
+          lazy val core = (project in file("core"))
+            .settings(
+              commonSettings,
+              name := "test-multi-module-core"
+            )
+          
+          lazy val api = (project in file("api"))
+            .dependsOn(core)
+            .settings(
+              commonSettings,
+              name := "test-multi-module-api"
+            )
+          EOF
+          
+          # Core module
+          cat > test-project-multi/core/src/main/scala/MathUtils.scala << 'EOF'
+          package core
+          
+          object MathUtils {
+            def square(x: Int): Int = x * x
+            def cube(x: Int): Int = x * x * x
+          }
+          EOF
+          
+          cat > test-project-multi/core/src/test/scala/MathUtilsSpec.scala << 'EOF'
+          package core
+          
+          import org.scalatest.flatspec.AnyFlatSpec
+          import org.scalatest.matchers.should.Matchers
+          
+          class MathUtilsSpec extends AnyFlatSpec with Matchers {
+            "MathUtils" should "square numbers correctly" in {
+              MathUtils.square(3) shouldBe 9
+            }
+          
+            it should "cube numbers correctly" in {
+              MathUtils.cube(2) shouldBe 8
+            }
+          }
+          EOF
+          
+          # API module
+          cat > test-project-multi/api/src/main/scala/ApiService.scala << 'EOF'
+          package api
+          
+          import core.MathUtils
+          
+          class ApiService {
+            def processSquare(x: Int): String = s"Square of $x is ${MathUtils.square(x)}"
+            def processCube(x: Int): String = s"Cube of $x is ${MathUtils.cube(x)}"
+          }
+          EOF
+          
+          cat > test-project-multi/api/src/test/scala/ApiServiceSpec.scala << 'EOF'
+          package api
+          
+          import org.scalatest.flatspec.AnyFlatSpec
+          import org.scalatest.matchers.should.Matchers
+          
+          class ApiServiceSpec extends AnyFlatSpec with Matchers {
+            val service = new ApiService()
+          
+            "ApiService" should "process square correctly" in {
+              service.processSquare(3) shouldBe "Square of 3 is 9"
+            }
+          
+            it should "process cube correctly" in {
+              service.processCube(2) shouldBe "Cube of 2 is 8"
+            }
+          }
+          EOF
+          
+          echo "✓ Multi-module test project created"
+
+      # ========================================
+      # Run Static Analysis (Multi-Module)
+      # ========================================
+      - name: Run Static Analysis (Multi-Module)
+        id: analysis-multi
+        uses: ./.github/actions/static-analysis-sbt
+        with:
+          component-name: 'test-multi-module'
+          build-version: '1.0.0-test'
+          # PAS d'Artifactory - utilise Maven Central
+          working-directory: './test-project-multi'
+          multi-module: true  # Use jacocoAggregate
+          enable-jacoco: true
+          upload-reports: true
+          reports-retention-days: 1
+
+      # ========================================
+      # Verify Reports
+      # ========================================
+      - name: Verify Multi-Module Reports
+        run: |
+          echo "========================================="
+          echo "Verifying Multi-Module Jacoco Reports"
+          echo "========================================="
+          
+          cd test-project-multi
+          
+          # Check aggregate report
+          if [ -f "${{ steps.analysis-multi.outputs.jacoco-report-path }}" ]; then
+            echo "✅ Aggregate Jacoco XML found"
+            echo "Coverage: ${{ steps.analysis-multi.outputs.coverage-percentage }}%"
+          else
+            echo "❌ ERROR: Aggregate Jacoco XML not found"
+            exit 1
+          fi
+          
+          echo "========================================="
+          echo "✅ Multi-Module Reports Verified"
+          echo "========================================="
+
+  # ========================================
+  # Test Skip Tests Mode
+  # ========================================
+  test-skip-tests:
+    name: Test Skip Tests Mode
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create Test Project
+        run: |
+          mkdir -p test-project-skip/project
+          mkdir -p test-project-skip/src/main/scala
+          mkdir -p test-project-skip/src/test/scala
+          
+          cat > test-project-skip/project/build.properties << 'EOF'
+          sbt.version=1.10.4
+          EOF
+          
+          cat > test-project-skip/project/plugins.sbt << 'EOF'
+          addSbtPlugin("com.github.sbt" % "sbt-jacoco" % "3.4.0")
+          EOF
+          
+          cat > test-project-skip/build.sbt << 'EOF'
+          name := "test-skip"
+          version := "1.0.0"
+          scalaVersion := "3.3.1"
+          libraryDependencies += "org.scalatest" %% "scalatest" % "3.2.15" % Test
+          EOF
+          
+          cat > test-project-skip/src/main/scala/Simple.scala << 'EOF'
+          object Simple {
+            def hello(): String = "Hello"
+          }
+          EOF
+          
+          cat > test-project-skip/src/test/scala/SimpleSpec.scala << 'EOF'
+          import org.scalatest.flatspec.AnyFlatSpec
+          import org.scalatest.matchers.should.Matchers
+          
+          class SimpleSpec extends AnyFlatSpec with Matchers {
+            "Simple" should "return hello" in {
+              Simple.hello() shouldBe "Hello"
+            }
+          }
+          EOF
+
+      # First run WITH tests
+      - name: Run Tests First
+        uses: ./.github/actions/static-analysis-sbt
+        with:
+          component-name: 'test-skip'
+          build-version: '1.0.0-test'
+          # PAS d'Artifactory
+          working-directory: './test-project-skip'
+          skip-tests: false
+          upload-reports: false
+
+      # Then run WITHOUT tests (should use existing reports)
+      - name: Run Analysis Without Tests
+        id: analysis-skip
+        uses: ./.github/actions/static-analysis-sbt
+        with:
+          component-name: 'test-skip'
+          build-version: '1.0.0-test'
+          # PAS d'Artifactory
+          working-directory: './test-project-skip'
+          skip-tests: true  # Should only generate reports
+          upload-reports: true
+          reports-retention-days: 1
+
+      - name: Verify Skip Tests Mode
+        run: |
+          echo "========================================="
+          echo "Verifying Skip Tests Mode"
+          echo "========================================="
+          echo "Status: ${{ steps.analysis-skip.outputs.analysis-status }}"
+          echo "Coverage: ${{ steps.analysis-skip.outputs.coverage-percentage }}%"
+          
+          if [ "${{ steps.analysis-skip.outputs.analysis-status }}" == "success" ]; then
+            echo "✅ Skip tests mode works correctly"
+          else
+            echo "❌ ERROR: Skip tests mode failed"
+            exit 1
+          fi
+          
+          echo "========================================="
+          echo "✅ Skip Tests Verified"
+          echo "========================================="
+  
+  # ========================================
+  # Summary
+  # ========================================
+  summary:
+    name: Test Summary
+    needs: [test-mono-module, test-multi-module, test-skip-tests]
+    if: always()
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Display Summary
+        run: |
+          echo "========================================="
+          echo "Static Analysis SBT - Test Summary"
+          echo "========================================="
+          echo "Mono-Module Test: ${{ needs.test-mono-module.result }}"
+          echo "Multi-Module Test: ${{ needs.test-multi-module.result }}"
+          echo "Skip Tests Test: ${{ needs.test-skip-tests.result }}"
+          echo "========================================="
+          
+          if [ "${{ needs.test-mono-module.result }}" == "success" ] && \
+             [ "${{ needs.test-multi-module.result }}" == "success" ] && \
+             [ "${{ needs.test-skip-tests.result }}" == "success" ]; then
+            echo "✅✅✅ ALL TESTS PASSED ✅✅✅"
+            exit 0
+          else
+            echo "❌❌❌ SOME TESTS FAILED ❌❌❌"
+            exit 1
+          fi

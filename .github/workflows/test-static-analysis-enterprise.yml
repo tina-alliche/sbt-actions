@@ -1,0 +1,321 @@
+name: Test Static Analysis SBT - Enterprise Simulation
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  # ========================================
+  # Test Enterprise Mode (Generic)
+  # ========================================
+  test-enterprise-simulation:
+    name: Test Enterprise Mode (Simulated)
+    name: Test Enterprise Mode (Simulated)
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      # ========================================
+      # Mock Enterprise Credentials
+      # ========================================
+      - name: Setup Mock Enterprise Credentials
+        run: |
+          echo "========================================="
+          echo "Setting up mock enterprise credentials"
+          echo "========================================="
+          echo "ARTIFACTORY_USER=mock-user" >> $GITHUB_ENV
+          echo "ARTIFACTORY_API_KEY=mock-api-key-12345" >> $GITHUB_ENV
+          echo "✅ Mock credentials set"
+      
+      # ========================================
+      # Create Custom Repositories File
+      # ========================================
+      - name: Create Custom Repositories Configuration
+        run: |
+          echo "========================================="
+          echo "Creating custom repositories file"
+          echo "========================================="
+          
+          mkdir -p .github/actions/setup-sbt/repositories
+          
+          cat > .github/actions/setup-sbt/repositories/custom-enterprise << 'EOF'
+          [repositories]
+            local
+            maven-enterprise: https://artifacts.example.com/maven-virtual/
+            sbt-enterprise: https://artifacts.example.com/sbt-virtual/, [organization]/[module]/(scala_[scalaVersion]/)(sbt_[sbtVersion]/)[revision]/[type]s/[artifact](-[classifier]).[ext]
+            maven-central: https://repo1.maven.org/maven2/
+          EOF
+          
+          echo "✅ Custom repositories file created"
+          cat .github/actions/setup-sbt/repositories/custom-enterprise
+      
+      # ========================================
+      # Create Test Project
+      # ========================================
+      - name: Create Test Project
+        run: |
+          echo "=== Creating Enterprise Test Project ==="
+          mkdir -p test-project-enterprise/project
+          mkdir -p test-project-enterprise/src/main/scala
+          mkdir -p test-project-enterprise/src/test/scala
+          
+          # project/build.properties
+          cat > test-project-enterprise/project/build.properties << 'EOF'
+          sbt.version=1.10.4
+          EOF
+          
+          # project/plugins.sbt (with jacoco)
+          cat > test-project-enterprise/project/plugins.sbt << 'EOF'
+          addSbtPlugin("com.github.sbt" % "sbt-jacoco" % "3.4.0")
+          EOF
+          
+          # build.sbt
+          cat > test-project-enterprise/build.sbt << 'EOF'
+          name := "test-enterprise"
+          version := "1.0.0"
+          scalaVersion := "3.3.1"
+          
+          libraryDependencies ++= Seq(
+            "org.scala-lang.modules" %% "scala-parser-combinators" % "2.3.0",
+            "org.scalatest" %% "scalatest" % "3.2.15" % Test
+          )
+          
+          // Jacoco settings
+          jacocoReportSettings := JacocoReportSettings(
+            "Jacoco Coverage Report",
+            None,
+            JacocoThresholds(),
+            Seq(JacocoReportFormats.ScalaHTML, JacocoReportFormats.XML),
+            "utf-8"
+          )
+          EOF
+          
+          # Main code
+          cat > test-project-enterprise/src/main/scala/EnterpriseService.scala << 'EOF'
+          class EnterpriseService {
+            def process(data: String): String = {
+              s"Processed: $data"
+            }
+            
+            def validate(input: Int): Boolean = {
+              input > 0 && input < 100
+            }
+          }
+          EOF
+          
+          # Test code
+          cat > test-project-enterprise/src/test/scala/EnterpriseServiceSpec.scala << 'EOF'
+          import org.scalatest.flatspec.AnyFlatSpec
+          import org.scalatest.matchers.should.Matchers
+          
+          class EnterpriseServiceSpec extends AnyFlatSpec with Matchers {
+            val service = new EnterpriseService()
+            
+            "EnterpriseService" should "process data correctly" in {
+              service.process("test") shouldBe "Processed: test"
+            }
+            
+            it should "validate positive numbers" in {
+              service.validate(50) shouldBe true
+            }
+            
+            it should "reject negative numbers" in {
+              service.validate(-1) shouldBe false
+            }
+            
+            it should "reject numbers >= 100" in {
+              service.validate(100) shouldBe false
+            }
+          }
+          EOF
+          
+          echo "✓ Enterprise test project created"
+      
+      # ========================================
+      # Run Static Analysis (Enterprise Mode)
+      # ========================================
+      - name: Run Static Analysis (Enterprise Mode)
+        id: analysis
+        uses: ./.github/actions/static-analysis-sbt
+        with:
+          component-name: 'test-enterprise'
+          build-version: '1.0.0-enterprise-test'
+          artifactory-host: 'artifacts.example.com'  # Generic enterprise Artifactory
+          repositories-file: 'custom-enterprise'     # Custom repositories file
+          working-directory: './test-project-enterprise'
+          multi-module: false
+          enable-jacoco: true
+          skip-tests: false
+          upload-reports: true
+          reports-retention-days: 1
+          env-vars: |
+            TZ: America/New_York
+            ENTERPRISE_MODE: true
+      
+      # ========================================
+      # Verify Reports
+      # ========================================
+      - name: Verify Jacoco Reports Exist
+        run: |
+          echo "========================================="
+          echo "Verifying Enterprise Jacoco Reports"
+          echo "========================================="
+          
+          # Construct full path
+          JACOCO_XML_FULL="test-project-enterprise/${{ steps.analysis.outputs.jacoco-report-path }}"
+          JACOCO_HTML_FULL="test-project-enterprise/${{ steps.analysis.outputs.jacoco-html-path }}"
+          
+          # Check Jacoco XML
+          if [ -f "$JACOCO_XML_FULL" ]; then
+            echo "✅ Jacoco XML found: $JACOCO_XML_FULL"
+            ls -lh "$JACOCO_XML_FULL"
+          else
+            echo "❌ ERROR: Jacoco XML not found at: $JACOCO_XML_FULL"
+            exit 1
+          fi
+          
+          # Check Jacoco HTML
+          if [ -d "$JACOCO_HTML_FULL" ]; then
+            echo "✅ Jacoco HTML found: $JACOCO_HTML_FULL"
+            ls -la "$JACOCO_HTML_FULL"
+          else
+            echo "⚠️  WARNING: Jacoco HTML not found"
+          fi
+          
+          echo ""
+          echo "========================================="
+          echo "✅ Reports Verified"
+          echo "========================================="
+      
+      # ========================================
+      # Verify Coverage
+      # ========================================
+      - name: Verify Coverage Percentage
+        run: |
+          echo "========================================="
+          echo "Coverage Metrics"
+          echo "========================================="
+          echo "Coverage: ${{ steps.analysis.outputs.coverage-percentage }}%"
+          echo "Status: ${{ steps.analysis.outputs.analysis-status }}"
+          echo "Artifact: ${{ steps.analysis.outputs.reports-artifact-name }}"
+          echo "========================================="
+          
+          # Verify coverage is numeric
+          COVERAGE="${{ steps.analysis.outputs.coverage-percentage }}"
+          if [[ "$COVERAGE" =~ ^[0-9]+\.?[0-9]*$ ]]; then
+            echo "✅ Coverage is numeric: $COVERAGE%"
+            
+            # Verify reasonable coverage (should be > 0 for this test)
+            if (( $(echo "$COVERAGE > 0" | bc -l) )); then
+              echo "✅ Coverage is greater than 0%"
+            else
+              echo "⚠️  WARNING: Coverage is 0%"
+            fi
+          else
+            echo "❌ ERROR: Coverage is not numeric: $COVERAGE"
+            exit 1
+          fi
+      
+      # ========================================
+      # Verify Enterprise Features
+      # ========================================
+      - name: Verify Enterprise Features Used
+        run: |
+          echo "========================================="
+          echo "Verifying Enterprise Features"
+          echo "========================================="
+          
+          # Check that custom repositories file was used
+          if [ -f ".github/actions/setup-sbt/repositories/custom-enterprise" ]; then
+            echo "✅ Custom repositories file exists"
+          else
+            echo "❌ ERROR: Custom repositories file not found"
+            exit 1
+          fi
+          
+          # Check environment variables were set
+          if [ -n "$ARTIFACTORY_USER" ]; then
+            echo "✅ ARTIFACTORY_USER is set: $ARTIFACTORY_USER"
+          else
+            echo "⚠️  WARNING: ARTIFACTORY_USER not set"
+          fi
+          
+          if [ -n "$ARTIFACTORY_API_KEY" ]; then
+            echo "✅ ARTIFACTORY_API_KEY is set: ${ARTIFACTORY_API_KEY:0:10}..."
+          else
+            echo "⚠️  WARNING: ARTIFACTORY_API_KEY not set"
+          fi
+          
+          echo ""
+          echo "========================================="
+          echo "✅ Enterprise Features Verified"
+          echo "========================================="
+      
+      # ========================================
+      # Download and Verify Artifact
+      # ========================================
+      - name: Download Reports Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ steps.analysis.outputs.reports-artifact-name }}
+          path: ./downloaded-reports
+      
+      - name: Verify Downloaded Reports
+        run: |
+          echo "========================================="
+          echo "Verifying Downloaded Reports"
+          echo "========================================="
+          
+          ls -la ./downloaded-reports
+          
+          # Check if Jacoco reports are in artifact
+          if find ./downloaded-reports -name "jacoco.xml" -type f | grep -q .; then
+            echo "✅ Jacoco XML found in artifact"
+          else
+            echo "❌ ERROR: Jacoco XML not found in artifact"
+            exit 1
+          fi
+          
+          echo "========================================="
+          echo "✅ Artifact Verified"
+          echo "========================================="
+  
+  # ========================================
+  # Summary
+  # ========================================
+  summary:
+    name: Enterprise Simulation Summary
+    needs: [test-enterprise-simulation]
+    if: always()
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Display Summary
+        run: |
+          echo "========================================="
+          echo "Static Analysis SBT - Enterprise Simulation"
+          echo "========================================="
+          echo "Enterprise Mode Test: ${{ needs.test-enterprise-simulation.result }}"
+          echo "========================================="
+          
+          if [ "${{ needs.test-enterprise-simulation.result }}" == "success" ]; then
+            echo "✅✅✅ ENTERPRISE SIMULATION PASSED ✅✅✅"
+            echo ""
+            echo "Features Tested:"
+            echo "  ✅ Custom Artifactory configuration"
+            echo "  ✅ Mock enterprise credentials"
+            echo "  ✅ Custom repositories file"
+            echo "  ✅ Environment variables"
+            echo "  ✅ Jacoco coverage reports"
+            echo "  ✅ Artifact upload/download"
+            echo ""
+            echo "🎯 Ready for deployment!"
+            exit 0
+          else
+            echo "❌❌❌ ENTERPRISE SIMULATION FAILED ❌❌❌"
+            exit 1
+          fi

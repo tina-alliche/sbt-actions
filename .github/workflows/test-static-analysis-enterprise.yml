@@ -12,7 +12,6 @@ jobs:
   # ========================================
   test-enterprise-simulation:
     name: Test Enterprise Mode (Simulated)
-    name: Test Enterprise Mode (Simulated)
     runs-on: ubuntu-latest
     
     steps:

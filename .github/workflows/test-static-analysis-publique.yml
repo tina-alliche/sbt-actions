@@ -123,7 +123,6 @@ jobs:
         with:
           component-name: 'test-mono-module'
           build-version: '1.0.0-test'
-          # PAS d'Artifactory - utilise Maven Central par défaut
           working-directory: './test-project-mono'
           multi-module: false
           enable-jacoco: true
@@ -353,42 +352,105 @@ jobs:
       # Run Static Analysis (Multi-Module)
       # ========================================
       - name: Run Static Analysis (Multi-Module)
-        id: analysis-multi
+        id: analysis
         uses: ./.github/actions/static-analysis-sbt
         with:
           component-name: 'test-multi-module'
           build-version: '1.0.0-test'
-          # PAS d'Artifactory - utilise Maven Central
           working-directory: './test-project-multi'
-          multi-module: true  # Use jacocoAggregate
+          multi-module: true
           enable-jacoco: true
+          skip-tests: false
           upload-reports: true
           reports-retention-days: 1
 
       # ========================================
-      # Verify Reports
+      # Verify Reports (Identical to Mono-Module)
       # ========================================
-      - name: Verify Multi-Module Reports
+      - name: Verify Jacoco Reports Exist
         run: |
           echo "========================================="
-          echo "Verifying Multi-Module Jacoco Reports"
+          echo "Verifying Jacoco Reports"
           echo "========================================="
           
-          # Construct full path
-          JACOCO_XML_FULL="test-project-multi/${{ steps.analysis-multi.outputs.jacoco-report-path }}"
+          # Construct full path (working-directory + report path)
+          JACOCO_XML_FULL="test-project-multi/${{ steps.analysis.outputs.jacoco-report-path }}"
+          JACOCO_HTML_FULL="test-project-multi/${{ steps.analysis.outputs.jacoco-html-path }}"
           
-          # Check aggregate report
+          # Check Jacoco XML
           if [ -f "$JACOCO_XML_FULL" ]; then
-            echo "✅ Aggregate Jacoco XML found: $JACOCO_XML_FULL"
-            echo "Coverage: ${{ steps.analysis-multi.outputs.coverage-percentage }}%"
+            echo "✅ Jacoco XML found: $JACOCO_XML_FULL"
+            ls -lh "$JACOCO_XML_FULL"
           else
-            echo "❌ ERROR: Aggregate Jacoco XML not found at: $JACOCO_XML_FULL"
-            echo "Output was: ${{ steps.analysis-multi.outputs.jacoco-report-path }}"
+            echo "❌ ERROR: Jacoco XML not found at: $JACOCO_XML_FULL"
+            echo "Output was: ${{ steps.analysis.outputs.jacoco-report-path }}"
+            exit 1
+          fi
+          
+          # Check Jacoco HTML
+          if [ -d "$JACOCO_HTML_FULL" ]; then
+            echo "✅ Jacoco HTML found: $JACOCO_HTML_FULL"
+            ls -la "$JACOCO_HTML_FULL"
+          else
+            echo "⚠️  WARNING: Jacoco HTML not found at: $JACOCO_HTML_FULL"
+          fi
+          
+          echo ""
+          echo "========================================="
+          echo "✅ Reports Verified"
+          echo "========================================="
+
+      # ========================================
+      # Verify Coverage (Adapted for Multi-Module)
+      # ========================================
+      - name: Verify Coverage Percentage
+        run: |
+          echo "========================================="
+          echo "Coverage Metrics"
+          echo "========================================="
+          echo "Coverage: ${{ steps.analysis.outputs.coverage-percentage }}%"
+          echo "Status: ${{ steps.analysis.outputs.analysis-status }}"
+          echo "Artifact: ${{ steps.analysis.outputs.reports-artifact-name }}"
+          echo "========================================="
+          
+          # Verify coverage is numeric OR N/A (multi-module may not have extractable coverage)
+          COVERAGE="${{ steps.analysis.outputs.coverage-percentage }}"
+          if [[ "$COVERAGE" =~ ^[0-9]+\.?[0-9]*$ ]]; then
+            echo "✅ Coverage is numeric: $COVERAGE%"
+          elif [[ "$COVERAGE" == "N/A" ]]; then
+            echo "⚠️  Coverage is N/A (normal for multi-module configurations)"
+          else
+            echo "❌ ERROR: Invalid coverage format: $COVERAGE"
+            exit 1
+          fi
+
+      # ========================================
+      # Download and Verify Artifact (Identical to Mono-Module)
+      # ========================================
+      - name: Download Reports Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ steps.analysis.outputs.reports-artifact-name }}
+          path: ./downloaded-reports
+
+      - name: Verify Downloaded Reports
+        run: |
+          echo "========================================="
+          echo "Verifying Downloaded Reports"
+          echo "========================================="
+          
+          ls -la ./downloaded-reports
+          
+          # Check if Jacoco reports are in artifact
+          if find ./downloaded-reports -name "jacoco.xml" -type f | grep -q .; then
+            echo "✅ Jacoco XML found in artifact"
+          else
+            echo "❌ ERROR: Jacoco XML not found in artifact"
             exit 1
           fi
           
           echo "========================================="
-          echo "✅ Multi-Module Reports Verified"
+          echo "✅ Artifact Verified"
           echo "========================================="
 
   # ========================================
@@ -446,7 +508,6 @@ jobs:
         with:
           component-name: 'test-skip'
           build-version: '1.0.0-test'
-          # PAS d'Artifactory
           working-directory: './test-project-skip'
           skip-tests: false
           upload-reports: false
@@ -458,9 +519,8 @@ jobs:
         with:
           component-name: 'test-skip'
           build-version: '1.0.0-test'
-          # PAS d'Artifactory
           working-directory: './test-project-skip'
-          skip-tests: true  # Should only generate reports
+          skip-tests: true
           upload-reports: true
           reports-retention-days: 1
 

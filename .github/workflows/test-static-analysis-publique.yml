@@ -3,7 +3,13 @@ name: Test Static Analysis SBT - Public
 on:
   push:
     branches: [main, develop]
+    paths:
+      - '.github/actions/static-analysis-sbt/**'
+      - '.github/workflows/test-static-analysis-public.yml'
   pull_request:
+    paths:
+      - '.github/actions/static-analysis-sbt/**'
+      - '.github/workflows/test-static-analysis-public.yml'
   workflow_dispatch:
 
 jobs:
@@ -140,23 +146,26 @@ jobs:
           echo "Verifying Jacoco Reports"
           echo "========================================="
           
-          cd test-project-mono
+          # Construct full path (working-directory + report path)
+          JACOCO_XML_FULL="test-project-mono/${{ steps.analysis.outputs.jacoco-report-path }}"
+          JACOCO_HTML_FULL="test-project-mono/${{ steps.analysis.outputs.jacoco-html-path }}"
           
           # Check Jacoco XML
-          if [ -f "${{ steps.analysis.outputs.jacoco-report-path }}" ]; then
-            echo "✅ Jacoco XML found: ${{ steps.analysis.outputs.jacoco-report-path }}"
-            ls -lh "${{ steps.analysis.outputs.jacoco-report-path }}"
+          if [ -f "$JACOCO_XML_FULL" ]; then
+            echo "✅ Jacoco XML found: $JACOCO_XML_FULL"
+            ls -lh "$JACOCO_XML_FULL"
           else
-            echo "❌ ERROR: Jacoco XML not found"
+            echo "❌ ERROR: Jacoco XML not found at: $JACOCO_XML_FULL"
+            echo "Output was: ${{ steps.analysis.outputs.jacoco-report-path }}"
             exit 1
           fi
           
           # Check Jacoco HTML
-          if [ -d "${{ steps.analysis.outputs.jacoco-html-path }}" ]; then
-            echo "✅ Jacoco HTML found: ${{ steps.analysis.outputs.jacoco-html-path }}"
-            ls -la "${{ steps.analysis.outputs.jacoco-html-path }}"
+          if [ -d "$JACOCO_HTML_FULL" ]; then
+            echo "✅ Jacoco HTML found: $JACOCO_HTML_FULL"
+            ls -la "$JACOCO_HTML_FULL"
           else
-            echo "⚠️  WARNING: Jacoco HTML not found"
+            echo "⚠️  WARNING: Jacoco HTML not found at: $JACOCO_HTML_FULL"
           fi
           
           echo ""
@@ -371,14 +380,16 @@ jobs:
           echo "Verifying Multi-Module Jacoco Reports"
           echo "========================================="
           
-          cd test-project-multi
+          # Construct full path
+          JACOCO_XML_FULL="test-project-multi/${{ steps.analysis-multi.outputs.jacoco-report-path }}"
           
           # Check aggregate report
-          if [ -f "${{ steps.analysis-multi.outputs.jacoco-report-path }}" ]; then
-            echo "✅ Aggregate Jacoco XML found"
+          if [ -f "$JACOCO_XML_FULL" ]; then
+            echo "✅ Aggregate Jacoco XML found: $JACOCO_XML_FULL"
             echo "Coverage: ${{ steps.analysis-multi.outputs.coverage-percentage }}%"
           else
-            echo "❌ ERROR: Aggregate Jacoco XML not found"
+            echo "❌ ERROR: Aggregate Jacoco XML not found at: $JACOCO_XML_FULL"
+            echo "Output was: ${{ steps.analysis-multi.outputs.jacoco-report-path }}"
             exit 1
           fi
           

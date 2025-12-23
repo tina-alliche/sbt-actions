@@ -292,11 +292,17 @@ runs:
         
         # Find Jacoco XML report
         echo "Searching for Jacoco XML..."
-        # Try both patterns: with and without /report/ subdirectory
-        JACOCO_XML=$(find . -path "*/jacoco/report/jacoco.xml" -type f 2>/dev/null | head -1)
+        
+        # For multi-module projects, try aggregate report first
+        JACOCO_XML=$(find . -path "*/jacoco/report/aggregate/jacoco.xml" -type f 2>/dev/null | head -1)
         
         if [ -z "$JACOCO_XML" ]; then
-          # Fallback: try without /report/
+          # Try standard report location (mono-module or multi-module root)
+          JACOCO_XML=$(find . -path "*/jacoco/report/jacoco.xml" -type f 2>/dev/null | head -1)
+        fi
+        
+        if [ -z "$JACOCO_XML" ]; then
+          # Fallback: try without /report/ (older versions)
           JACOCO_XML=$(find . -path "*/jacoco/jacoco.xml" -type f 2>/dev/null | head -1)
         fi
         

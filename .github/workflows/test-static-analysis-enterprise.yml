@@ -144,7 +144,7 @@ jobs:
           component-name: 'test-enterprise'
           build-version: '1.0.0-enterprise-test'
           artifactory-host: 'artifacts.example.com'
-          repositories-file: 'custom-enterprise'
+          repositories-file: 'test-configs/repositories-test'
           working-directory: './test-project-enterprise'
           multi-module: false
           enable-jacoco: true

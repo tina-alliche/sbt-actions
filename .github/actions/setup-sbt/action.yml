@@ -47,7 +47,7 @@ inputs:
     required: false
     default: 'Artifactory Realm'
   
-  credentials-host:
+  artifactory-host:
     description: 'Artifactory host (e.g., artifacts.example.com) - if empty, credentials will not be configured'
     required: false
     default: ''
@@ -182,11 +182,11 @@ runs:
     # Step 3: Configure Credentials
     # ========================================
     - name: Configure Artifactory Credentials
-      if: inputs.credentials-host != ''
+      if: inputs.artifactory-host != ''
       shell: bash
       env:
         CREDENTIALS_REALM: ${{ inputs.credentials-realm }}
-        CREDENTIALS_HOST: ${{ inputs.credentials-host }}
+        CREDENTIALS_HOST: ${{ inputs.artifactory-host }}
       run: |
         chmod +x ${{ github.action_path }}/scripts/configure-credentials.sh
         ${{ github.action_path }}/scripts/configure-credentials.sh

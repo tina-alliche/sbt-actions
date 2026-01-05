@@ -39,7 +39,7 @@ This will:
     sbt-version: '1.10.4'
     scala-version: '3.3.1'
     java-version: '21'
-    credentials-host: 'artifacts.example.com'
+    artifactory-host: 'artifacts.example.com'
     repositories-content: |
       [repositories]
       local
@@ -59,7 +59,7 @@ This will:
     sbt-version: '1.10.4'
     scala-version: '3.3.1'
     java-version: '21'
-    credentials-host: 'artifacts.example.com'
+    artifactory-host: 'artifacts.example.com'
     repositories-file: 'config/repositories'
   env:
     ARTIFACTORY_USER: ${{ secrets.ARTIFACTORY_USER }}
@@ -106,12 +106,12 @@ This will:
 
 ### Credentials Configuration
 
-| Input | Description | Required | Default |
-|-------|-------------|----------|---------|
+| Input               | Description | Required | Default |
+|---------------------|-------------|----------|---------|
 | `credentials-realm` | Artifactory realm | No | `Artifactory Realm` |
-| `credentials-host` | Artifactory host (e.g., artifacts.example.com) | No | `''` |
+| `artifactory-host`  | Artifactory host (e.g., artifacts.example.com) | No | `''` |
 
-**Note:** If `credentials-host` is empty, credentials will not be configured.
+**Note:** If `artifactory-host` is empty, credentials will not be configured.
 
 **Required Environment Variables (when using credentials):**
 - `ARTIFACTORY_USER`: Username for Artifactory
@@ -203,7 +203,7 @@ jobs:
           sbt-version: '1.10.4'
           scala-version: '3.3.1'
           java-version: '21'
-          credentials-host: 'artifacts.example.com'
+          artifactory-host: 'artifacts.example.com'
           repositories-content: |
             [repositories]
             local
@@ -248,7 +248,7 @@ jobs:
           sbt-version: '1.10.4'
           scala-version: '3.3.1'
           java-version: '21'
-          credentials-host: 'artifacts.example.com'
+          artifactory-host: 'artifacts.example.com'
           repositories-file: 'config/repositories'
       
       - name: Build
